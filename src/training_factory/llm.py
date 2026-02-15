@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import json
-import re
-
 from langchain_openai import ChatOpenAI
 
 from training_factory.settings import Settings, get_settings
@@ -46,25 +43,3 @@ def invoke_text(prompt: str, fallback_text: str) -> str:
     model = build_chat_model(settings)
     response = model.invoke(prompt)
     return _coerce_content_to_text(response.content)
-
-
-def parse_json_object(text: str) -> dict:
-    """Parse an object from model text, including fenced JSON responses."""
-
-    cleaned = text.strip()
-    if cleaned.startswith("```"):
-        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        cleaned = cleaned.strip()
-
-    try:
-        parsed = json.loads(cleaned)
-    except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
-        if not match:
-            raise
-        parsed = json.loads(match.group(0))
-
-    if not isinstance(parsed, dict):
-        raise ValueError("Expected parsed JSON object")
-    return parsed
