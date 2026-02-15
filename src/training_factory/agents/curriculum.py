@@ -1,11 +1,27 @@
+import json
+from pathlib import Path
 from typing import Any
+
+from training_factory import llm
+from training_factory.utils.json_schema import validate_json
+
+SCHEMA_PATH = Path(__file__).resolve().parents[3] / "schemas" / "curriculum.schema.json"
 
 
 def generate_curriculum(brief: dict[str, Any]) -> dict[str, Any]:
     topic = brief.get("topic", "Untitled Topic")
-    return {
+    fallback = {
         "modules": [
             {"title": f"{topic}: Foundations", "duration_minutes": 30},
             {"title": f"{topic}: Practice", "duration_minutes": 30},
         ]
     }
+    prompt = (
+        "Return only JSON for a training curriculum with key modules, "
+        "where modules is an array of {title, duration_minutes}. "
+        f"Brief: {json.dumps(brief)}"
+    )
+    raw = llm.invoke_text(prompt=prompt, fallback_text=json.dumps(fallback))
+    curriculum = llm.parse_json_object(raw)
+    validate_json(curriculum, SCHEMA_PATH)
+    return curriculum

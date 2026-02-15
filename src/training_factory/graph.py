@@ -26,26 +26,33 @@ class GraphState(TypedDict, total=False):
 
 def _brief_node(state: GraphState) -> dict[str, Any]:
     brief = generate_brief(state["request"])
-    validate_json(brief, SCHEMA_DIR / "brief.schema.json")
     return {"brief": brief}
 
 
 def _curriculum_node(state: GraphState) -> dict[str, Any]:
     curriculum = generate_curriculum(state["brief"])
-    validate_json(curriculum, SCHEMA_DIR / "curriculum.schema.json")
     return {"curriculum": curriculum}
 
 
 def _slides_node(state: GraphState) -> dict[str, Any]:
     slides = generate_slides(state["curriculum"])
-    validate_json(slides, SCHEMA_DIR / "slides.schema.json")
-    return {"slides": slides}
+    revision_count = int(state.get("revision_count", 0))
+    if state.get("qa", {}).get("status") == "fail":
+        revision_count += 1
+    return {"slides": slides, "revision_count": revision_count}
 
 
 def _qa_node(state: GraphState) -> dict[str, Any]:
     qa = generate_qa(state["slides"])
-    validate_json(qa, SCHEMA_DIR / "qa.schema.json")
     return {"qa": qa}
+
+
+def _route_after_qa(state: GraphState) -> str:
+    qa_status = state.get("qa", {}).get("status")
+    revision_count = int(state.get("revision_count", 0))
+    if qa_status == "fail" and revision_count < 1:
+        return "slides"
+    return "package"
 
 
 def _package_node(state: GraphState) -> dict[str, Any]:
@@ -75,7 +82,11 @@ def build_graph():
     graph.add_edge("brief", "curriculum")
     graph.add_edge("curriculum", "slides")
     graph.add_edge("slides", "qa")
-    graph.add_edge("qa", "package")
+    graph.add_conditional_edges(
+        "qa",
+        _route_after_qa,
+        {"slides": "slides", "package": "package"},
+    )
     graph.add_edge("package", END)
 
     return graph.compile()
