@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["request", "brief", "curriculum", "slides", "qa"],
+  "properties": {
+    "request": {
+      "type": "object",
+      "required": ["topic", "audience"],
+      "properties": {
+        "topic": {"type": "string"},
+        "audience": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "brief": {
+      "type": "object",
+      "required": ["topic", "audience", "goals", "constraints"],
+      "properties": {
+        "topic": {"type": "string"},
+        "audience": {"type": "string"},
+        "goals": {"type": "array", "items": {"type": "string"}},
+        "constraints": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "curriculum": {
+      "type": "object",
+      "required": ["modules"],
+      "properties": {
+        "modules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["title", "duration_minutes"],
+            "properties": {
+              "title": {"type": "string"},
+              "duration_minutes": {"type": "integer", "minimum": 1}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "slides": {
+      "type": "object",
+      "required": ["deck"],
+      "properties": {
+        "deck": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["slide", "title", "bullets"],
+            "properties": {
+              "slide": {"type": "integer", "minimum": 1},
+              "title": {"type": "string"},
+              "bullets": {"type": "array", "items": {"type": "string"}
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "qa": {
+      "type": "object",
+      "required": ["checks"],
+      "properties": {
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["prompt", "answer"],
+            "properties": {
+              "prompt": {"type": "string"},
+              "answer": {"type": "string"}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

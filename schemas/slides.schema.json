@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["deck"],
+  "properties": {
+    "deck": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["slide", "title", "bullets"],
+        "properties": {
+          "slide": {"type": "integer", "minimum": 1},
+          "title": {"type": "string"},
+          "bullets": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
