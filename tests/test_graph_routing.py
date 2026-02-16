@@ -38,7 +38,11 @@ def test_qa_pass_routes_to_package(monkeypatch) -> None:
     monkeypatch.setattr(graph_module, "generate_brief", _brief)
     monkeypatch.setattr(graph_module, "generate_curriculum", _curriculum)
     monkeypatch.setattr(graph_module, "generate_slides", slides_fn)
-    monkeypatch.setattr(graph_module, "generate_qa", lambda _: {"status": "pass", "checks": []})
+    monkeypatch.setattr(
+        graph_module,
+        "generate_qa",
+        lambda _lab, _templates: {"status": "pass", "checks": []},
+    )
 
     graph = build_graph()
     result = graph.invoke(TrainingState(request={"topic": "X", "audience": "Y"}).model_dump())
@@ -57,7 +61,7 @@ def test_qa_fail_retries_once_then_packages(monkeypatch) -> None:
         calls["slides"] += 1
         return _slides(curriculum)
 
-    def qa_fn(_: dict) -> dict:
+    def qa_fn(_lab: dict, _templates: dict) -> dict:
         calls["qa"] += 1
         if calls["qa"] == 1:
             return {"status": "fail", "checks": []}
@@ -88,7 +92,11 @@ def test_qa_fail_with_revision_limit_packages_without_retry(monkeypatch) -> None
     monkeypatch.setattr(graph_module, "generate_brief", _brief)
     monkeypatch.setattr(graph_module, "generate_curriculum", _curriculum)
     monkeypatch.setattr(graph_module, "generate_slides", slides_fn)
-    monkeypatch.setattr(graph_module, "generate_qa", lambda _: {"status": "fail", "checks": []})
+    monkeypatch.setattr(
+        graph_module,
+        "generate_qa",
+        lambda _lab, _templates: {"status": "fail", "checks": []},
+    )
 
     graph = build_graph()
     result = graph.invoke(

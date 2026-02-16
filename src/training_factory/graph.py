@@ -50,7 +50,7 @@ def _lab_node(state: GraphState) -> dict[str, Any]:
 
 
 def _qa_node(state: GraphState) -> dict[str, Any]:
-    qa = generate_qa(state["templates"])
+    qa = generate_qa(state["lab"], state["templates"])
     return {"qa": qa}
 
 
@@ -71,14 +71,62 @@ def _route_after_retry_gate(state: GraphState) -> str:
     return state.get("route", "package")
 
 
+def _canonicalize_lab_for_bundle(lab: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(lab.get("labs"), list):
+        return lab
+
+    if all(key in lab for key in ("title", "objective", "steps")):
+        steps = lab.get("steps", [])
+        instructions = []
+        if isinstance(steps, list):
+            instructions = [
+                step.get("instruction", "")
+                for step in steps
+                if isinstance(step, dict) and isinstance(step.get("instruction"), str)
+            ]
+        if not instructions:
+            instructions = ["Complete the lab"]
+        return {
+            "labs": [
+                {
+                    "title": lab.get("title", "Lab"),
+                    "instructions": instructions,
+                    "expected_outcome": lab.get("objective", "Lab objective met"),
+                }
+            ]
+        }
+    return {"labs": []}
+
+
+def _canonicalize_templates_for_bundle(templates: dict[str, Any]) -> dict[str, str]:
+    readme = templates.get("README.md")
+    runbook = templates.get("RUNBOOK.md")
+    if isinstance(readme, str) and isinstance(runbook, str):
+        return {"README.md": readme, "RUNBOOK.md": runbook}
+
+    readme_node = templates.get("readme_md")
+    runbook_node = templates.get("runbook_md")
+    if isinstance(readme_node, dict):
+        readme = readme_node.get("content", "")
+    else:
+        readme = ""
+    if isinstance(runbook_node, dict):
+        runbook = runbook_node.get("content", "")
+    else:
+        runbook = ""
+    return {"README.md": str(readme), "RUNBOOK.md": str(runbook)}
+
+
 def _package_node(state: GraphState) -> dict[str, Any]:
+    lab = _canonicalize_lab_for_bundle(state["lab"])
+    templates = _canonicalize_templates_for_bundle(state["templates"])
     packaging = {
         "request": state["request"],
         "brief": state["brief"],
         "curriculum": state["curriculum"],
-        "lab": state["lab"],
+        "lab": lab,
         "slides": state["slides"],
-        "templates": state["templates"],
+        "templates": templates,
         "qa": state["qa"],
     }
     validate_json(packaging, SCHEMA_DIR / "bundle.schema.json")
