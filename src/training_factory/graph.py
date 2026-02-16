@@ -66,7 +66,7 @@ def _package_node(state: GraphState) -> dict[str, Any]:
     validate_json(packaging, SCHEMA_DIR / "bundle.schema.json")
     return {
         "packaging": packaging,
-        "revision_count": int(state.get("revision_count", 0)) + 1,
+        "revision_count": int(state.get("revision_count", 0)),
     }
 
 

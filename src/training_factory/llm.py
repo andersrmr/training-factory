@@ -37,7 +37,7 @@ def invoke_text(prompt: str, fallback_text: str) -> str:
     """Invoke the LLM and return text content, falling back for local runs."""
 
     settings = get_settings()
-    if not settings.openai_api_key:
+    if settings.offline_mode or not settings.openai_api_key:
         return fallback_text
 
     model = build_chat_model(settings)
