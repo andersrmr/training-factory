@@ -16,4 +16,5 @@ def test_graph_smoke() -> None:
     validate_json(result["packaging"], schema_path)
 
     assert result["packaging"]["brief"]["topic"] == "Intro to Python"
+    assert result["packaging"]["lab"]["labs"]
     assert result["packaging"]["slides"]["deck"]

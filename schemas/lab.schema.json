@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["labs"],
+  "properties": {
+    "labs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "instructions", "expected_outcome"],
+        "properties": {
+          "title": {"type": "string"},
+          "instructions": {"type": "array", "items": {"type": "string"}},
+          "expected_outcome": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

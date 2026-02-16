@@ -5,6 +5,7 @@ from langgraph.graph import END, START, StateGraph
 
 from training_factory.agents.brief import generate_brief
 from training_factory.agents.curriculum import generate_curriculum
+from training_factory.agents.lab import generate_lab
 from training_factory.agents.qa import generate_qa
 from training_factory.agents.slides import generate_slides
 from training_factory.state import TrainingState
@@ -18,6 +19,7 @@ class GraphState(TypedDict):
     request: dict[str, Any]
     brief: dict[str, Any]
     curriculum: dict[str, Any]
+    lab: dict[str, Any]
     slides: dict[str, Any]
     qa: dict[str, Any]
     packaging: dict[str, Any]
@@ -38,6 +40,11 @@ def _curriculum_node(state: GraphState) -> dict[str, Any]:
 def _slides_node(state: GraphState) -> dict[str, Any]:
     slides = generate_slides(state["curriculum"])
     return {"slides": slides}
+
+
+def _lab_node(state: GraphState) -> dict[str, Any]:
+    lab = generate_lab(state["curriculum"])
+    return {"lab": lab}
 
 
 def _qa_node(state: GraphState) -> dict[str, Any]:
@@ -62,6 +69,7 @@ def _package_node(state: GraphState) -> dict[str, Any]:
         "request": state["request"],
         "brief": state["brief"],
         "curriculum": state["curriculum"],
+        "lab": state["lab"],
         "slides": state["slides"],
         "qa": state["qa"],
     }
@@ -76,6 +84,7 @@ def build_graph():
     graph = StateGraph(GraphState)
     graph.add_node("brief", _brief_node)
     graph.add_node("curriculum", _curriculum_node)
+    graph.add_node("lab", _lab_node)
     graph.add_node("slides", _slides_node)
     graph.add_node("qa", _qa_node)
     graph.add_node("retry_gate", _retry_gate_node)
@@ -83,7 +92,8 @@ def build_graph():
 
     graph.add_edge(START, "brief")
     graph.add_edge("brief", "curriculum")
-    graph.add_edge("curriculum", "slides")
+    graph.add_edge("curriculum", "lab")
+    graph.add_edge("lab", "slides")
     graph.add_edge("slides", "qa")
     graph.add_edge("qa", "retry_gate")
     graph.add_conditional_edges(
