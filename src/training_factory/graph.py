@@ -14,7 +14,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 SCHEMA_DIR = ROOT_DIR / "schemas"
 
 
-class GraphState(TypedDict, total=False):
+class GraphState(TypedDict):
     request: dict[str, Any]
     brief: dict[str, Any]
     curriculum: dict[str, Any]
