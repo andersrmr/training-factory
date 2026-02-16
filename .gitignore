@@ -1,5 +1,11 @@
 .venv/
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
 *.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .env
 .python-version
