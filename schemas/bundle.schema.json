@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["request", "brief", "curriculum", "lab", "slides", "qa"],
+  "required": ["request", "brief", "curriculum", "lab", "slides", "templates", "qa"],
   "properties": {
     "request": {
       "type": "object",
@@ -80,6 +80,15 @@
             "additionalProperties": false
           }
         }
+      },
+      "additionalProperties": false
+    },
+    "templates": {
+      "type": "object",
+      "required": ["README.md", "RUNBOOK.md"],
+      "properties": {
+        "README.md": {"type": "string", "minLength": 1},
+        "RUNBOOK.md": {"type": "string", "minLength": 1}
       },
       "additionalProperties": false
     },

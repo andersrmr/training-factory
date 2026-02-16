@@ -8,6 +8,7 @@ from training_factory.agents.curriculum import generate_curriculum
 from training_factory.agents.lab import generate_lab
 from training_factory.agents.qa import generate_qa
 from training_factory.agents.slides import generate_slides
+from training_factory.agents.templates import generate_templates
 from training_factory.state import TrainingState
 from training_factory.utils.json_schema import validate_json
 
@@ -21,6 +22,7 @@ class GraphState(TypedDict):
     curriculum: dict[str, Any]
     lab: dict[str, Any]
     slides: dict[str, Any]
+    templates: dict[str, Any]
     qa: dict[str, Any]
     packaging: dict[str, Any]
     revision_count: int
@@ -48,8 +50,13 @@ def _lab_node(state: GraphState) -> dict[str, Any]:
 
 
 def _qa_node(state: GraphState) -> dict[str, Any]:
-    qa = generate_qa(state["slides"])
+    qa = generate_qa(state["templates"])
     return {"qa": qa}
+
+
+def _templates_node(state: GraphState) -> dict[str, Any]:
+    templates = generate_templates(state["slides"])
+    return {"templates": templates}
 
 
 def _retry_gate_node(state: GraphState) -> dict[str, Any]:
@@ -71,6 +78,7 @@ def _package_node(state: GraphState) -> dict[str, Any]:
         "curriculum": state["curriculum"],
         "lab": state["lab"],
         "slides": state["slides"],
+        "templates": state["templates"],
         "qa": state["qa"],
     }
     validate_json(packaging, SCHEMA_DIR / "bundle.schema.json")
@@ -86,6 +94,7 @@ def build_graph():
     graph.add_node("curriculum", _curriculum_node)
     graph.add_node("lab", _lab_node)
     graph.add_node("slides", _slides_node)
+    graph.add_node("templates", _templates_node)
     graph.add_node("qa", _qa_node)
     graph.add_node("retry_gate", _retry_gate_node)
     graph.add_node("package", _package_node)
@@ -94,7 +103,8 @@ def build_graph():
     graph.add_edge("brief", "curriculum")
     graph.add_edge("curriculum", "lab")
     graph.add_edge("lab", "slides")
-    graph.add_edge("slides", "qa")
+    graph.add_edge("slides", "templates")
+    graph.add_edge("templates", "qa")
     graph.add_edge("qa", "retry_gate")
     graph.add_conditional_edges(
         "retry_gate",

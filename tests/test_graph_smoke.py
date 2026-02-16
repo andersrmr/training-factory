@@ -18,3 +18,5 @@ def test_graph_smoke() -> None:
     assert result["packaging"]["brief"]["topic"] == "Intro to Python"
     assert result["packaging"]["lab"]["labs"]
     assert result["packaging"]["slides"]["deck"]
+    assert result["packaging"]["templates"]["README.md"].strip()
+    assert result["packaging"]["templates"]["RUNBOOK.md"].strip()

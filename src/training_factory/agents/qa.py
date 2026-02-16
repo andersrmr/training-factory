@@ -8,19 +8,25 @@ from training_factory.utils.structured_output import generate_structured_output
 SCHEMA_PATH = Path(__file__).resolve().parents[3] / "schemas" / "qa.schema.json"
 
 
-def generate_qa(slides: dict[str, Any]) -> dict[str, Any]:
-    deck = slides.get("deck", [])
+def generate_qa(templates: dict[str, Any]) -> dict[str, Any]:
+    readme_text = templates.get("README.md", "")
+    runbook_text = templates.get("RUNBOOK.md", "")
+    checks_source = [("README.md", readme_text), ("RUNBOOK.md", runbook_text)]
     checks = []
-    for slide in deck:
-        title = slide.get("title", "Unknown")
-        checks.append({"prompt": f"What is one key idea from '{title}'?", "answer": "Sample answer"})
+    for name, content in checks_source:
+        checks.append(
+            {
+                "prompt": f"Does {name} include actionable guidance?",
+                "answer": "Yes" if content else "No",
+            }
+        )
 
     fallback = {"status": "pass", "checks": checks}
     prompt = (
         "Return JSON only. Do not include markdown fences, labels, or extra prose. "
         "Produce QA with keys status and checks. "
         "status must be pass or fail. checks is an array of {prompt, answer}. "
-        f"Slides: {json.dumps(slides)}"
+        f"Templates: {json.dumps(templates)}"
     )
 
     def _normalize(payload: dict) -> dict:

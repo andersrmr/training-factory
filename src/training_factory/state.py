@@ -9,6 +9,7 @@ class TrainingState(BaseModel):
     curriculum: dict[str, Any] = Field(default_factory=dict)
     lab: dict[str, Any] = Field(default_factory=dict)
     slides: dict[str, Any] = Field(default_factory=dict)
+    templates: dict[str, Any] = Field(default_factory=dict)
     qa: dict[str, Any] = Field(default_factory=dict)
     packaging: dict[str, Any] = Field(default_factory=dict)
     revision_count: int = 0
