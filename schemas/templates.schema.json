@@ -1,10 +1,28 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Templates",
   "type": "object",
-  "required": ["README.md", "RUNBOOK.md"],
+  "required": ["readme_md", "runbook_md"],
   "properties": {
-    "README.md": {"type": "string", "minLength": 1},
-    "RUNBOOK.md": {"type": "string", "minLength": 1}
+    "readme_md": {
+      "type": "object",
+      "required": ["filename", "content"],
+      "properties": {
+        "filename": { "type": "string", "const": "README.md" },
+        "content": { "type": "string", "minLength": 50 }
+      },
+      "additionalProperties": false
+    },
+    "runbook_md": {
+      "type": "object",
+      "required": ["filename", "content"],
+      "properties": {
+        "filename": { "type": "string", "const": "RUNBOOK.md" },
+        "content": { "type": "string", "minLength": 50 }
+      },
+      "additionalProperties": false
+    }
   },
   "additionalProperties": false
 }
+

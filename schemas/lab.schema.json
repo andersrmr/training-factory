@@ -1,21 +1,41 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Lab",
   "type": "object",
-  "required": ["labs"],
+  "required": ["title", "objective", "prerequisites", "steps", "checkpoints"],
   "properties": {
-    "labs": {
+    "title": { "type": "string", "minLength": 3 },
+    "objective": { "type": "string", "minLength": 10 },
+    "prerequisites": {
       "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "setup": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 3,
       "items": {
         "type": "object",
-        "required": ["title", "instructions", "expected_outcome"],
+        "required": ["step", "instruction"],
         "properties": {
-          "title": {"type": "string"},
-          "instructions": {"type": "array", "items": {"type": "string"}},
-          "expected_outcome": {"type": "string"}
+          "step": { "type": "integer", "minimum": 1 },
+          "instruction": { "type": "string", "minLength": 5 },
+          "expected_output": { "type": "string" }
         },
         "additionalProperties": false
       }
+    },
+    "checkpoints": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "type": "string", "minLength": 5 }
     }
   },
   "additionalProperties": false
 }
+
