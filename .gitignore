@@ -33,6 +33,7 @@ htmlcov/
 # ------------------------------
 build/
 dist/
+out/
 *.egg-info/
 .eggs/
 wheels/
