@@ -1,0 +1,7 @@
+[workflow]
+prefer_small_commits = true
+run_pytest_after_changes = true
+
+[safety]
+never_commit = [".env"]
+restrict_writes_to_repo = true
