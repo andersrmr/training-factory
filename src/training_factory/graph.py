@@ -22,6 +22,7 @@ class GraphState(TypedDict):
     qa: dict[str, Any]
     packaging: dict[str, Any]
     revision_count: int
+    route: str
 
 
 def _brief_node(state: GraphState) -> dict[str, Any]:
@@ -36,10 +37,7 @@ def _curriculum_node(state: GraphState) -> dict[str, Any]:
 
 def _slides_node(state: GraphState) -> dict[str, Any]:
     slides = generate_slides(state["curriculum"])
-    revision_count = int(state.get("revision_count", 0))
-    if state.get("qa", {}).get("status") == "fail":
-        revision_count += 1
-    return {"slides": slides, "revision_count": revision_count}
+    return {"slides": slides}
 
 
 def _qa_node(state: GraphState) -> dict[str, Any]:
@@ -47,12 +45,16 @@ def _qa_node(state: GraphState) -> dict[str, Any]:
     return {"qa": qa}
 
 
-def _route_after_qa(state: GraphState) -> str:
+def _retry_gate_node(state: GraphState) -> dict[str, Any]:
     qa_status = state.get("qa", {}).get("status")
     revision_count = int(state.get("revision_count", 0))
     if qa_status == "fail" and revision_count < 1:
-        return "slides"
-    return "package"
+        return {"revision_count": revision_count + 1, "route": "slides"}
+    return {"route": "package"}
+
+
+def _route_after_retry_gate(state: GraphState) -> str:
+    return state.get("route", "package")
 
 
 def _package_node(state: GraphState) -> dict[str, Any]:
@@ -76,15 +78,17 @@ def build_graph():
     graph.add_node("curriculum", _curriculum_node)
     graph.add_node("slides", _slides_node)
     graph.add_node("qa", _qa_node)
+    graph.add_node("retry_gate", _retry_gate_node)
     graph.add_node("package", _package_node)
 
     graph.add_edge(START, "brief")
     graph.add_edge("brief", "curriculum")
     graph.add_edge("curriculum", "slides")
     graph.add_edge("slides", "qa")
+    graph.add_edge("qa", "retry_gate")
     graph.add_conditional_edges(
-        "qa",
-        _route_after_qa,
+        "retry_gate",
+        _route_after_retry_gate,
         {"slides": "slides", "package": "package"},
     )
     graph.add_edge("package", END)
