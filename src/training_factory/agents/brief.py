@@ -3,8 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from training_factory import llm
-from training_factory.utils.json_extract import extract_json_object
-from training_factory.utils.json_schema import validate_json
+from training_factory.utils.structured_output import generate_structured_output
 
 SCHEMA_PATH = Path(__file__).resolve().parents[3] / "schemas" / "brief.schema.json"
 
@@ -24,16 +23,21 @@ def generate_brief(request: dict[str, Any]) -> dict[str, Any]:
         "topic, audience, goals (string array), constraints (string array). "
         f"Topic: {topic}. Audience: {audience}."
     )
-    raw = llm.invoke_text(prompt=prompt, fallback_text=json.dumps(fallback))
-    payload = extract_json_object(raw)
-    if "brief" in payload and isinstance(payload["brief"], dict):
-        payload = payload["brief"]
 
-    brief = {
-        "topic": payload.get("topic", fallback["topic"]),
-        "audience": payload.get("audience", fallback["audience"]),
-        "goals": payload.get("goals", fallback["goals"]),
-        "constraints": payload.get("constraints", fallback["constraints"]),
-    }
-    validate_json(brief, SCHEMA_PATH)
-    return brief
+    def _normalize(payload: dict) -> dict:
+        if "brief" in payload and isinstance(payload["brief"], dict):
+            payload = payload["brief"]
+        return {
+            "topic": payload.get("topic", fallback["topic"]),
+            "audience": payload.get("audience", fallback["audience"]),
+            "goals": payload.get("goals", fallback["goals"]),
+            "constraints": payload.get("constraints", fallback["constraints"]),
+        }
+
+    return generate_structured_output(
+        model=llm,
+        prompt=prompt,
+        schema_path=SCHEMA_PATH,
+        normalize=_normalize,
+        offline_stub=fallback,
+    )

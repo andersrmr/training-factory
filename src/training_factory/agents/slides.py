@@ -3,8 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from training_factory import llm
-from training_factory.utils.json_extract import extract_json_object
-from training_factory.utils.json_schema import validate_json
+from training_factory.utils.structured_output import generate_structured_output
 
 SCHEMA_PATH = Path(__file__).resolve().parents[3] / "schemas" / "slides.schema.json"
 
@@ -28,11 +27,16 @@ def generate_slides(curriculum: dict[str, Any]) -> dict[str, Any]:
         "slide, title, bullets. "
         f"Curriculum: {json.dumps(curriculum)}"
     )
-    raw = llm.invoke_text(prompt=prompt, fallback_text=json.dumps(fallback))
-    payload = extract_json_object(raw)
-    if "slides" in payload and isinstance(payload["slides"], dict):
-        payload = payload["slides"]
 
-    slides = {"deck": payload.get("deck", fallback["deck"])}
-    validate_json(slides, SCHEMA_PATH)
-    return slides
+    def _normalize(payload: dict) -> dict:
+        if "slides" in payload and isinstance(payload["slides"], dict):
+            payload = payload["slides"]
+        return {"deck": payload.get("deck", fallback["deck"])}
+
+    return generate_structured_output(
+        model=llm,
+        prompt=prompt,
+        schema_path=SCHEMA_PATH,
+        normalize=_normalize,
+        offline_stub=fallback,
+    )

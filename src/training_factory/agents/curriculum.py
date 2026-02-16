@@ -3,8 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from training_factory import llm
-from training_factory.utils.json_extract import extract_json_object
-from training_factory.utils.json_schema import validate_json
+from training_factory.utils.structured_output import generate_structured_output
 
 SCHEMA_PATH = Path(__file__).resolve().parents[3] / "schemas" / "curriculum.schema.json"
 
@@ -23,11 +22,16 @@ def generate_curriculum(brief: dict[str, Any]) -> dict[str, Any]:
         "where modules is an array of {title, duration_minutes}. "
         f"Brief: {json.dumps(brief)}"
     )
-    raw = llm.invoke_text(prompt=prompt, fallback_text=json.dumps(fallback))
-    payload = extract_json_object(raw)
-    if "curriculum" in payload and isinstance(payload["curriculum"], dict):
-        payload = payload["curriculum"]
 
-    curriculum = {"modules": payload.get("modules", fallback["modules"])}
-    validate_json(curriculum, SCHEMA_PATH)
-    return curriculum
+    def _normalize(payload: dict) -> dict:
+        if "curriculum" in payload and isinstance(payload["curriculum"], dict):
+            payload = payload["curriculum"]
+        return {"modules": payload.get("modules", fallback["modules"])}
+
+    return generate_structured_output(
+        model=llm,
+        prompt=prompt,
+        schema_path=SCHEMA_PATH,
+        normalize=_normalize,
+        offline_stub=fallback,
+    )
