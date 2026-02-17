@@ -1,39 +1,96 @@
-# Training Factory (LangGraph) — v1
+# Training Factory
 
-A LangGraph-based pipeline that generates structured technical training assets from a single topic prompt.
+Training Factory is a LangGraph-based pipeline that generates structured technical training assets from a topic and audience.
 
-## What it does
+Given one input request, it produces a validated bundle with:
 
-Given a topic (e.g. “Power BI basics”) and an audience level (e.g. novice), Training Factory produces a validated training bundle:
+- Brief
+- Curriculum
+- Slides
+- Lab
+- Templates (`README` + `RUNBOOK`)
+- QA report
 
-- **Brief**: goals + constraints
-- **Curriculum**: module outline (timed)
-- **Lab**: hands-on exercise steps
-- **Slides**: slide deck outline (JSON)
-- **Templates**: README + Runbook markdown
-- **QA**: checks bundle completeness and basic coherence
-- **Bundle**: packaged JSON artifact validated against JSON Schema
+All major artifacts are schema-validated JSON, which keeps outputs predictable and easy to automate against.
 
-This project is designed as a “first vertical slice” to demonstrate clean multi-agent orchestration, schema-driven outputs, deterministic offline tests, and a CLI demo path.
+## Features
 
-## Why this exists
+- Graph-driven orchestration with explicit state transitions
+- Bounded QA retry loop (`qa fail` retries once from `slides`)
+- Schema-first output validation
+- CLI for local generation
+- Offline deterministic test path
 
-Creating training materials is repetitive and time-consuming: research, outline, slides, labs, and documentation templates.
-This system automates a baseline version of that workflow so teams can iterate faster and standardize training deliverables.
+## CLI Usage
 
-Example use cases:
-- Power BI / Power Apps onboarding
-- Enterprise ChatGPT usage training
-- GitHub version control training
+Generate a bundle:
+
+```bash
+python -m training_factory generate \
+  --topic "Power BI basics" \
+  --audience novice
+```
+
+Write output to a file:
+
+```bash
+python -m training_factory generate \
+  --topic "Power BI basics" \
+  --audience novice \
+  --out out/bundle_powerbi.json
+```
+
+Run in offline mode (no external model calls):
+
+```bash
+python -m training_factory generate \
+  --topic "Power BI basics" \
+  --audience novice \
+  --offline
+```
+
+## Offline Deterministic Tests
+
+The test suite is designed to be deterministic and runnable without network dependencies.
+
+Run tests:
+
+```bash
+pytest -q
+```
+
+Key guarantees:
+
+- No live model call requirement for tests
+- Stable routing and packaging assertions
+- Schema validation on final bundle payloads
+
+## Repository Layout
+
+```text
+training-factory/
+├─ src/training_factory/
+│  ├─ agents/           # brief/curriculum/slides/lab/templates/qa agents
+│  ├─ graph.py          # LangGraph wiring and routing logic
+│  ├─ state.py          # shared pipeline state model
+│  ├─ cli.py            # Typer CLI entrypoint
+│  └─ utils/            # schema + structured-output helpers
+├─ schemas/             # JSON Schemas for artifacts and final bundle
+├─ tests/               # routing, smoke, CLI, and utility tests
+└─ out/                 # generated bundles (example outputs)
+```
 
 ## Architecture
 
-Pipeline (v1):
-`brief -> curriculum -> slides -> lab -> templates -> qa -> package`
+Pipeline order:
 
-Each stage is a small “agent” that produces structured JSON constrained by a schema. The graph coordinates state flow and implements a bounded retry loop.
+`START -> brief -> curriculum -> slides -> lab -> templates -> qa -> (slides | package) -> END`
 
-### LangGraph diagram
+Retry behavior:
+
+- If `qa.status == "fail"` and `revision_count < 1`, route back to `slides`
+- Then continue `slides -> lab -> templates -> qa`
+- Otherwise route to `package`
 
 ```mermaid
 flowchart LR
@@ -43,7 +100,28 @@ flowchart LR
   slides --> lab[lab]
   lab --> templates[templates]
   templates --> qa[qa]
-  qa --> retry_gate{retry_gate}
-  retry_gate -->|qa pass| package[package]
-  retry_gate -->|qa fail & revision_count < 1| slides
+  qa -->|fail and revision_count < 1| slides
+  qa -->|pass or retry limit reached| package[package]
   package --> END([END])
+```
+
+## Output Contract
+
+The packaged bundle includes:
+
+- `request`
+- `brief`
+- `curriculum`
+- `slides`
+- `lab`
+- `templates`
+- `qa`
+
+The `templates` payload is canonicalized to:
+
+```json
+{
+  "readme_md": { "content": "..." },
+  "runbook_md": { "content": "..." }
+}
+```
