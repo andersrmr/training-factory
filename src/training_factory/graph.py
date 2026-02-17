@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 
 from langgraph.graph import END, START, StateGraph
 
@@ -52,10 +52,14 @@ def _lab_node(state: GraphState) -> dict[str, Any]:
     return {"lab": lab}
 
 
-def _qa_node(state: GraphState) -> dict[str, Any]:
+def _templates_node(state: GraphState) -> dict[str, Any]:
     templates = generate_templates(state["slides"])
-    qa = generate_qa(state["slides"], state["lab"], templates)
-    return {"qa": qa, "templates": templates}
+    return {"templates": templates}
+
+
+def _qa_node(state: GraphState) -> dict[str, Any]:
+    qa = generate_qa(state["slides"], state["lab"], state["templates"])
+    return {"qa": qa}
 
 
 def _route_after_qa(state: GraphState) -> str:
@@ -137,6 +141,7 @@ def build_graph():
     graph.add_node("curriculum", _curriculum_node)
     graph.add_node("slides", _slides_node)
     graph.add_node("lab", _lab_node)
+    graph.add_node("templates", _templates_node)
     graph.add_node("qa", _qa_node)
     graph.add_node("package", _package_node)
 
@@ -144,7 +149,8 @@ def build_graph():
     graph.add_edge("brief", "curriculum")
     graph.add_edge("curriculum", "slides")
     graph.add_edge("slides", "lab")
-    graph.add_edge("lab", "qa")
+    graph.add_edge("lab", "templates")
+    graph.add_edge("templates", "qa")
     graph.add_conditional_edges(
         "qa",
         _route_after_qa,
@@ -158,5 +164,5 @@ def build_graph():
 def run_pipeline(topic: str, audience: str) -> TrainingState:
     app = build_graph()
     initial = TrainingState(request={"topic": topic, "audience": audience})
-    result = app.invoke(initial.model_dump())
+    result = app.invoke(cast(GraphState, initial.model_dump()))
     return TrainingState.model_validate(result)
