@@ -85,10 +85,24 @@
     },
     "templates": {
       "type": "object",
-      "required": ["README.md", "RUNBOOK.md"],
+      "required": ["readme_md", "runbook_md"],
       "properties": {
-        "README.md": {"type": "string", "minLength": 1},
-        "RUNBOOK.md": {"type": "string", "minLength": 1}
+        "readme_md": {
+          "type": "object",
+          "required": ["content"],
+          "properties": {
+            "content": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        },
+        "runbook_md": {
+          "type": "object",
+          "required": ["content"],
+          "properties": {
+            "content": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     },

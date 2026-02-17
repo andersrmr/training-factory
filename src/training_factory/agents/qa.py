@@ -23,10 +23,6 @@ def _has_steps_and_checkpoints(lab: dict[str, Any]) -> bool:
 
 
 def _template_content(templates: dict[str, Any], filename: str) -> str:
-    direct = templates.get(filename)
-    if isinstance(direct, str):
-        return direct
-
     if filename == "README.md":
         node = templates.get("readme_md")
     elif filename == "RUNBOOK.md":
@@ -34,9 +30,12 @@ def _template_content(templates: dict[str, Any], filename: str) -> str:
     else:
         node = None
 
-    if isinstance(node, dict):
-        if node.get("filename") == filename and isinstance(node.get("content"), str):
-            return node["content"]
+    if isinstance(node, dict) and isinstance(node.get("content"), str):
+        return node["content"]
+
+    direct = templates.get(filename)
+    if isinstance(direct, str):
+        return direct
     return ""
 
 
@@ -82,6 +81,11 @@ def _templates_align_with_materials(slides: dict[str, Any], lab: dict[str, Any],
     return has_lab_ref and has_slide_ref
 
 
+def _is_plausible_markdown(text: str) -> bool:
+    stripped = text.strip()
+    return len(stripped) >= 20 and ("\n" in stripped or stripped.startswith("#"))
+
+
 def generate_qa(
     slides: dict[str, Any], lab: dict[str, Any], templates: dict[str, Any]
 ) -> dict[str, Any]:
@@ -121,6 +125,22 @@ def generate_qa(
 
     status = "pass" if all(item["answer"] == "Yes" for item in checks) else "fail"
     fallback = {"status": status, "checks": checks}
+    offline_templates_ok = _is_plausible_markdown(_template_content(templates, "README.md")) and _is_plausible_markdown(
+        _template_content(templates, "RUNBOOK.md")
+    )
+    offline_stub = {
+        "status": "pass" if offline_templates_ok else "fail",
+        "checks": [
+            {
+                "prompt": "Do templates include non-empty plausible README.md content?",
+                "answer": "Yes" if _is_plausible_markdown(_template_content(templates, "README.md")) else "No",
+            },
+            {
+                "prompt": "Do templates include non-empty plausible RUNBOOK.md content?",
+                "answer": "Yes" if _is_plausible_markdown(_template_content(templates, "RUNBOOK.md")) else "No",
+            },
+        ],
+    }
     prompt = (
         "Return JSON only. Do not include markdown fences, labels, or extra prose. "
         "Produce QA with keys status and checks. "
@@ -148,5 +168,5 @@ def generate_qa(
         prompt=prompt,
         schema_path=SCHEMA_PATH,
         normalize=_normalize,
-        offline_stub=fallback,
+        offline_stub=offline_stub,
     )

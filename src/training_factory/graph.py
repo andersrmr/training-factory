@@ -97,23 +97,28 @@ def _canonicalize_lab_for_bundle(lab: dict[str, Any]) -> dict[str, Any]:
     return {"labs": []}
 
 
-def _canonicalize_templates_for_bundle(templates: dict[str, Any]) -> dict[str, str]:
-    readme = templates.get("README.md")
-    runbook = templates.get("RUNBOOK.md")
-    if isinstance(readme, str) and isinstance(runbook, str):
-        return {"README.md": readme, "RUNBOOK.md": runbook}
+def _canonicalize_templates_for_bundle(
+    templates: dict[str, Any],
+) -> dict[str, dict[str, str]]:
+    readme_content = ""
+    runbook_content = ""
 
     readme_node = templates.get("readme_md")
     runbook_node = templates.get("runbook_md")
-    if isinstance(readme_node, dict):
-        readme = readme_node.get("content", "")
-    else:
-        readme = ""
-    if isinstance(runbook_node, dict):
-        runbook = runbook_node.get("content", "")
-    else:
-        runbook = ""
-    return {"README.md": str(readme), "RUNBOOK.md": str(runbook)}
+    if isinstance(readme_node, dict) and isinstance(readme_node.get("content"), str):
+        readme_content = readme_node["content"]
+    elif isinstance(templates.get("README.md"), str):
+        readme_content = templates["README.md"]
+
+    if isinstance(runbook_node, dict) and isinstance(runbook_node.get("content"), str):
+        runbook_content = runbook_node["content"]
+    elif isinstance(templates.get("RUNBOOK.md"), str):
+        runbook_content = templates["RUNBOOK.md"]
+
+    return {
+        "readme_md": {"content": readme_content},
+        "runbook_md": {"content": runbook_content},
+    }
 
 
 def _package_node(state: GraphState) -> dict[str, Any]:

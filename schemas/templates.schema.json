@@ -6,7 +6,7 @@
   "properties": {
     "readme_md": {
       "type": "object",
-      "required": ["filename", "content"],
+      "required": ["content"],
       "properties": {
         "filename": { "type": "string", "const": "README.md" },
         "content": { "type": "string", "minLength": 50 }
@@ -15,7 +15,7 @@
     },
     "runbook_md": {
       "type": "object",
-      "required": ["filename", "content"],
+      "required": ["content"],
       "properties": {
         "filename": { "type": "string", "const": "RUNBOOK.md" },
         "content": { "type": "string", "minLength": 50 }
@@ -25,4 +25,3 @@
   },
   "additionalProperties": false
 }
-
