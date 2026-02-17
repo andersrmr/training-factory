@@ -93,16 +93,16 @@ Retry behavior:
 - Otherwise route to `package`
 
 ```mermaid
-flowchart LR
-  START([START]) --> brief[brief]
-  brief --> curriculum[curriculum]
-  curriculum --> slides[slides]
-  slides --> lab[lab]
-  lab --> templates[templates]
-  templates --> qa[qa]
-  qa -->|fail and revision_count < 1| slides
-  qa -->|pass or retry limit reached| package[package]
-  package --> END([END])
+flowchart TD
+    START([START]) --> brief[brief]
+    brief --> curriculum[curriculum]
+    curriculum --> slides[slides]
+    slides --> lab[lab]
+    lab --> templates[templates]
+    templates --> qa[qa]
+    qa -->|fail and revision_count < 1| slides
+    qa -->|pass or retry limit reached| package[package]
+    package --> END([END])
 ```
 
 ## Output Contract
