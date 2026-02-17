@@ -26,7 +26,6 @@ class GraphState(TypedDict):
     qa: dict[str, Any]
     packaging: dict[str, Any]
     revision_count: int
-    route: str
 
 
 def _brief_node(state: GraphState) -> dict[str, Any]:
@@ -41,6 +40,10 @@ def _curriculum_node(state: GraphState) -> dict[str, Any]:
 
 def _slides_node(state: GraphState) -> dict[str, Any]:
     slides = generate_slides(state["curriculum"])
+    qa_status = state.get("qa", {}).get("status")
+    revision_count = int(state.get("revision_count", 0))
+    if qa_status == "fail" and revision_count < 1:
+        return {"slides": slides, "revision_count": revision_count + 1}
     return {"slides": slides}
 
 
@@ -50,25 +53,17 @@ def _lab_node(state: GraphState) -> dict[str, Any]:
 
 
 def _qa_node(state: GraphState) -> dict[str, Any]:
-    qa = generate_qa(state["lab"], state["templates"])
-    return {"qa": qa}
-
-
-def _templates_node(state: GraphState) -> dict[str, Any]:
     templates = generate_templates(state["slides"])
-    return {"templates": templates}
+    qa = generate_qa(state["lab"], templates)
+    return {"qa": qa, "templates": templates}
 
 
-def _retry_gate_node(state: GraphState) -> dict[str, Any]:
+def _route_after_qa(state: GraphState) -> str:
     qa_status = state.get("qa", {}).get("status")
     revision_count = int(state.get("revision_count", 0))
     if qa_status == "fail" and revision_count < 1:
-        return {"revision_count": revision_count + 1, "route": "slides"}
-    return {"route": "package"}
-
-
-def _route_after_retry_gate(state: GraphState) -> str:
-    return state.get("route", "package")
+        return "slides"
+    return "package"
 
 
 def _canonicalize_lab_for_bundle(lab: dict[str, Any]) -> dict[str, Any]:
@@ -140,23 +135,19 @@ def build_graph():
     graph = StateGraph(GraphState)
     graph.add_node("brief", _brief_node)
     graph.add_node("curriculum", _curriculum_node)
-    graph.add_node("lab", _lab_node)
     graph.add_node("slides", _slides_node)
-    graph.add_node("templates", _templates_node)
+    graph.add_node("lab", _lab_node)
     graph.add_node("qa", _qa_node)
-    graph.add_node("retry_gate", _retry_gate_node)
     graph.add_node("package", _package_node)
 
     graph.add_edge(START, "brief")
     graph.add_edge("brief", "curriculum")
-    graph.add_edge("curriculum", "lab")
-    graph.add_edge("lab", "slides")
-    graph.add_edge("slides", "templates")
-    graph.add_edge("templates", "qa")
-    graph.add_edge("qa", "retry_gate")
+    graph.add_edge("curriculum", "slides")
+    graph.add_edge("slides", "lab")
+    graph.add_edge("lab", "qa")
     graph.add_conditional_edges(
-        "retry_gate",
-        _route_after_retry_gate,
+        "qa",
+        _route_after_qa,
         {"slides": "slides", "package": "package"},
     )
     graph.add_edge("package", END)
