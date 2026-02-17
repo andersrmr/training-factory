@@ -41,7 +41,7 @@ def test_qa_pass_routes_to_package(monkeypatch) -> None:
     monkeypatch.setattr(
         graph_module,
         "generate_qa",
-        lambda _lab, _templates: {"status": "pass", "checks": []},
+        lambda _slides, _lab, _templates: {"status": "pass", "checks": []},
     )
 
     graph = build_graph()
@@ -61,7 +61,7 @@ def test_qa_fail_retries_once_then_packages(monkeypatch) -> None:
         calls["slides"] += 1
         return _slides(curriculum)
 
-    def qa_fn(_lab: dict, _templates: dict) -> dict:
+    def qa_fn(_slides: dict, _lab: dict, _templates: dict) -> dict:
         calls["qa"] += 1
         if calls["qa"] == 1:
             return {"status": "fail", "checks": []}
@@ -95,7 +95,7 @@ def test_qa_fail_with_revision_limit_packages_without_retry(monkeypatch) -> None
     monkeypatch.setattr(
         graph_module,
         "generate_qa",
-        lambda _lab, _templates: {"status": "fail", "checks": []},
+        lambda _slides, _lab, _templates: {"status": "fail", "checks": []},
     )
 
     graph = build_graph()

@@ -40,12 +40,67 @@ def _template_content(templates: dict[str, Any], filename: str) -> str:
     return ""
 
 
-def generate_qa(lab: dict[str, Any], templates: dict[str, Any]) -> dict[str, Any]:
+def _slide_text(slides: dict[str, Any]) -> str:
+    deck = slides.get("deck")
+    if not isinstance(deck, list):
+        return ""
+
+    parts: list[str] = []
+    for item in deck:
+        if not isinstance(item, dict):
+            continue
+        title = item.get("title")
+        if isinstance(title, str):
+            parts.append(title)
+        bullets = item.get("bullets")
+        if isinstance(bullets, list):
+            parts.extend([b for b in bullets if isinstance(b, str)])
+    return " ".join(parts).strip()
+
+
+def _slides_reference_lab(slides: dict[str, Any]) -> bool:
+    text = _slide_text(slides).lower()
+    if not text:
+        return False
+    return any(token in text for token in ("lab", "exercise", "hands-on", "checkpoint"))
+
+
+def _templates_align_with_materials(slides: dict[str, Any], lab: dict[str, Any], templates: dict[str, Any]) -> bool:
+    readme = _template_content(templates, "README.md").lower()
+    runbook = _template_content(templates, "RUNBOOK.md").lower()
+    slide_text = _slide_text(slides).lower()
+
+    lab_present = bool(lab)
+    slides_present = bool(slide_text)
+    templates_present = bool(readme) and bool(runbook)
+    if not (lab_present and slides_present and templates_present):
+        return False
+
+    combined = f"{readme} {runbook}"
+    has_lab_ref = any(token in combined for token in ("lab", "exercise", "checkpoint"))
+    has_slide_ref = any(token in combined for token in ("slide", "deck", "module", "lesson"))
+    return has_lab_ref and has_slide_ref
+
+
+def generate_qa(
+    slides: dict[str, Any], lab: dict[str, Any], templates: dict[str, Any]
+) -> dict[str, Any]:
     lab_has_structure = _has_steps_and_checkpoints(lab)
+    slides_have_content = bool(_slide_text(slides))
+    slides_reference_lab = _slides_reference_lab(slides)
     has_readme = bool(_template_content(templates, "README.md"))
     has_runbook = bool(_template_content(templates, "RUNBOOK.md"))
+    templates_align = _templates_align_with_materials(slides, lab, templates)
 
     checks = [
+        {
+            "prompt": "Do slides align with curriculum/lab objectives?",
+            "answer": "Yes" if slides_have_content and lab_has_structure else "No",
+        },
+        {
+            "prompt": "Do slides reference the lab appropriately?",
+            "answer": "Yes" if slides_reference_lab else "No",
+        },
         {
             "prompt": "Does lab exist and include steps/checkpoints?",
             "answer": "Yes" if lab_has_structure else "No",
@@ -58,6 +113,10 @@ def generate_qa(lab: dict[str, Any], templates: dict[str, Any]) -> dict[str, Any
             "prompt": "Does templates include RUNBOOK.md?",
             "answer": "Yes" if has_runbook else "No",
         },
+        {
+            "prompt": "Do templates align with slides and lab?",
+            "answer": "Yes" if templates_align else "No",
+        },
     ]
 
     status = "pass" if all(item["answer"] == "Yes" for item in checks) else "fail"
@@ -67,10 +126,13 @@ def generate_qa(lab: dict[str, Any], templates: dict[str, Any]) -> dict[str, Any
         "Produce QA with keys status and checks. "
         "status must be pass or fail. checks is an array of {prompt, answer}. "
         "Checks must include: "
-        "(1) lab exists and has steps/checkpoints, "
-        "(2) templates includes README.md, "
-        "(3) templates includes RUNBOOK.md. "
-        f"Lab: {json.dumps(lab)}. Templates: {json.dumps(templates)}"
+        "(1) slides align with curriculum/lab objectives using slide titles/bullets, "
+        "(2) slides reference the lab appropriately at least conceptually, "
+        "(3) lab exists and has steps/checkpoints, "
+        "(4) templates includes README.md, "
+        "(5) templates includes RUNBOOK.md, "
+        "(6) templates align with slides and lab (README + RUNBOOK consistent). "
+        f"Slides: {json.dumps(slides)}. Lab: {json.dumps(lab)}. Templates: {json.dumps(templates)}"
     )
 
     def _normalize(payload: dict) -> dict:

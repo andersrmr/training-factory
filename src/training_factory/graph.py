@@ -54,7 +54,7 @@ def _lab_node(state: GraphState) -> dict[str, Any]:
 
 def _qa_node(state: GraphState) -> dict[str, Any]:
     templates = generate_templates(state["slides"])
-    qa = generate_qa(state["lab"], templates)
+    qa = generate_qa(state["slides"], state["lab"], templates)
     return {"qa": qa, "templates": templates}
 
 
