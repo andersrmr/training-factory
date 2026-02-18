@@ -134,15 +134,68 @@ def generate_lab(curriculum: dict[str, Any]) -> dict[str, Any]:
         if "lab" in payload and isinstance(payload["lab"], dict):
             payload = payload["lab"]
 
+        def _coerce_string_list(value: Any, fallback_list: list[str]) -> list[str]:
+            if isinstance(value, list):
+                normalized = [item.strip() for item in value if isinstance(item, str) and item.strip()]
+                return normalized or fallback_list
+            if isinstance(value, str) and value.strip():
+                return [value.strip()]
+            return fallback_list
+
+        def _coerce_steps(value: Any, fallback_steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            if not isinstance(value, list):
+                return fallback_steps
+
+            normalized_steps: list[dict[str, Any]] = []
+            for idx, item in enumerate(value, start=1):
+                if isinstance(item, str) and item.strip():
+                    normalized_steps.append({"step": idx, "instruction": item.strip()})
+                    continue
+                if not isinstance(item, dict):
+                    continue
+
+                instruction = item.get("instruction")
+                if not isinstance(instruction, str) or not instruction.strip():
+                    continue
+
+                step_num = item.get("step")
+                step_value = step_num if isinstance(step_num, int) and step_num > 0 else idx
+                step_entry: dict[str, Any] = {
+                    "step": step_value,
+                    "instruction": instruction.strip(),
+                }
+                expected_output = item.get("expected_output")
+                if isinstance(expected_output, str) and expected_output.strip():
+                    step_entry["expected_output"] = expected_output.strip()
+                normalized_steps.append(step_entry)
+
+            if not normalized_steps:
+                return fallback_steps
+
+            while len(normalized_steps) < 3:
+                normalized_steps.append(
+                    {
+                        "step": len(normalized_steps) + 1,
+                        "instruction": f"Complete remaining task {len(normalized_steps) + 1}",
+                    }
+                )
+            return normalized_steps
+
         if mode == "single":
             if all(key in payload for key in ("title", "objective", "prerequisites", "steps", "checkpoints")):
                 return {
                     "title": payload.get("title", single_fallback["title"]),
                     "objective": payload.get("objective", single_fallback["objective"]),
-                    "prerequisites": payload.get("prerequisites", single_fallback["prerequisites"]),
-                    "setup": payload.get("setup", single_fallback["setup"]),
-                    "steps": payload.get("steps", single_fallback["steps"]),
-                    "checkpoints": payload.get("checkpoints", single_fallback["checkpoints"]),
+                    "prerequisites": _coerce_string_list(
+                        payload.get("prerequisites"),
+                        single_fallback["prerequisites"],
+                    ),
+                    "setup": _coerce_string_list(payload.get("setup"), single_fallback["setup"]),
+                    "steps": _coerce_steps(payload.get("steps"), single_fallback["steps"]),
+                    "checkpoints": _coerce_string_list(
+                        payload.get("checkpoints"),
+                        single_fallback["checkpoints"],
+                    ),
                 }
             return _legacy_to_single(payload, single_fallback)
 
