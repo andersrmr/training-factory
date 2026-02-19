@@ -82,3 +82,7 @@ def generate(
     typer.echo(f"Curriculum modules: {module_count}")
     typer.echo(f"Slides: {slide_count}")
     typer.echo(f"QA status: {qa_status}")
+
+
+if __name__ == "__main__":
+    app()
