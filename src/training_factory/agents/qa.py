@@ -126,6 +126,54 @@ def _module_sources_valid(curriculum: dict[str, Any], valid_ids: set[str]) -> bo
     return True
 
 
+def _source_tiers(research: dict[str, Any]) -> dict[str, str]:
+    tiers: dict[str, str] = {}
+    sources = research.get("sources", [])
+    if not isinstance(sources, list):
+        return tiers
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        source_id = source.get("id")
+        authority_tier = source.get("authority_tier")
+        if isinstance(source_id, str) and source_id.strip() and isinstance(authority_tier, str):
+            tiers[source_id.strip()] = authority_tier.strip().upper()
+    return tiers
+
+
+def _is_sensitive_topic(topic: str) -> bool:
+    lowered = topic.lower()
+    return any(
+        token in lowered
+        for token in ("governance", "security", "risk", "compliance", "policy", "alm", "lifecycle")
+    )
+
+
+def _authority_usage_valid(curriculum: dict[str, Any], research: dict[str, Any]) -> bool:
+    references_used = curriculum.get("references_used")
+    if not isinstance(references_used, list) or not references_used:
+        return False
+
+    tiers_by_source = _source_tiers(research)
+    cited_tiers: list[str] = []
+    for source_id in references_used:
+        if not isinstance(source_id, str) or not source_id.strip():
+            continue
+        tier = tiers_by_source.get(source_id.strip())
+        if not tier:
+            continue
+        cited_tiers.append(tier)
+
+    topic = str(curriculum.get("topic", ""))
+    sensitive_topic = _is_sensitive_topic(topic)
+    tier_a_count = sum(1 for tier in cited_tiers if tier == "A")
+    tier_b_count = sum(1 for tier in cited_tiers if tier == "B")
+
+    if sensitive_topic:
+        return tier_a_count >= 1
+    return tier_a_count >= 1 or tier_b_count >= 2
+
+
 def generate_qa(
     slides: dict[str, Any],
     lab: dict[str, Any],
@@ -142,6 +190,7 @@ def generate_qa(
     research_ids = _research_ids(research)
     has_valid_curriculum_refs = _curriculum_references_valid(curriculum, research_ids)
     has_valid_module_sources = _module_sources_valid(curriculum, research_ids)
+    has_authoritative_citations = _authority_usage_valid(curriculum, research)
 
     checks = [
         {
@@ -176,6 +225,10 @@ def generate_qa(
             "prompt": "Does each curriculum module include sources and are they valid research source IDs?",
             "answer": "Yes" if has_valid_module_sources else "No",
         },
+        {
+            "prompt": "Does curriculum cite sufficiently authoritative sources (Tier A/B) for this topic?",
+            "answer": "Yes" if has_authoritative_citations else "No",
+        },
     ]
 
     status = "pass" if all(item["answer"] == "Yes" for item in checks) else "fail"
@@ -186,7 +239,12 @@ def generate_qa(
     offline_stub = {
         "status": (
             "pass"
-            if (offline_templates_ok and has_valid_curriculum_refs and has_valid_module_sources)
+            if (
+                offline_templates_ok
+                and has_valid_curriculum_refs
+                and has_valid_module_sources
+                and has_authoritative_citations
+            )
             else "fail"
         ),
         "checks": [
@@ -206,6 +264,10 @@ def generate_qa(
                 "prompt": "Does each curriculum module include sources and are they valid research source IDs?",
                 "answer": "Yes" if has_valid_module_sources else "No",
             },
+            {
+                "prompt": "Does curriculum cite sufficiently authoritative sources (Tier A/B) for this topic?",
+                "answer": "Yes" if has_authoritative_citations else "No",
+            },
         ],
     }
     prompt = (
@@ -220,7 +282,8 @@ def generate_qa(
         "(5) templates includes RUNBOOK.md, "
         "(6) templates align with slides and lab (README + RUNBOOK consistent), "
         "(7) curriculum references_used exists and cites valid research source IDs, "
-        "(8) each curriculum module includes sources with valid research source IDs. "
+        "(8) each curriculum module includes sources with valid research source IDs, "
+        "(9) curriculum cites sufficiently authoritative Tier A/B sources based on topic sensitivity. "
         f"Slides: {json.dumps(slides)}. Lab: {json.dumps(lab)}. Templates: {json.dumps(templates)}. "
         f"Curriculum: {json.dumps(curriculum)}. Research: {json.dumps(research)}"
     )
