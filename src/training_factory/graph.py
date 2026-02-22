@@ -55,7 +55,7 @@ def _research_retry_node(state: GraphState) -> dict[str, Any]:
 
 
 def _curriculum_node(state: GraphState) -> dict[str, Any]:
-    curriculum = generate_curriculum(state["brief"])
+    curriculum = generate_curriculum(state["brief"], state["research"])
     return {"curriculum": curriculum}
 
 

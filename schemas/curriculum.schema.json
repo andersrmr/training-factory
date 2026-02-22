@@ -1,18 +1,30 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["modules"],
+  "required": ["topic", "audience", "modules", "references_used"],
   "properties": {
+    "topic": {"type": "string"},
+    "audience": {"type": "string"},
+    "references_used": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
     "modules": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["title", "duration_minutes"],
+        "required": ["title", "duration_minutes", "sources"],
         "properties": {
           "title": {"type": "string"},
-          "duration_minutes": {"type": "integer", "minimum": 1}
+          "duration_minutes": {"type": "integer", "minimum": 1},
+          "sources": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          }
         },
-        "additionalProperties": false
+        "additionalProperties": true
       }
     }
   },

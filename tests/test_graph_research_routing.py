@@ -30,8 +30,15 @@ def _brief(request: dict, research: dict) -> dict:
     }
 
 
-def _curriculum(_: dict) -> dict:
-    return {"modules": [{"title": "M1", "duration_minutes": 10}]}
+def _curriculum(brief: dict, _: dict) -> dict:
+    topic = str(brief.get("topic", "T"))
+    audience = str(brief.get("audience", "A"))
+    return {
+        "topic": topic,
+        "audience": audience,
+        "references_used": ["src_001"],
+        "modules": [{"title": "M1", "duration_minutes": 10, "sources": ["src_001"]}],
+    }
 
 
 def _slides(_: dict) -> dict:
