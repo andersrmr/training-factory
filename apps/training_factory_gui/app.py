@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import os
 from pathlib import Path
 import sys
 from typing import Any
@@ -18,7 +19,7 @@ from tf_gui.bundle_view import (
     render_bundle_summary,
     safe_read_text,
 )
-from tf_gui.runner import parse_command, run_pipeline_from_template, substitute_tokens
+from tf_gui.runner import run_pipeline_from_template
 from tf_gui.state import clear_bundle, get_state, init_state_defaults
 
 
@@ -26,6 +27,55 @@ def _format_ts(value: Any) -> str:
     if isinstance(value, str) and value:
         return value
     return "(not loaded)"
+
+
+def _validate_loaded_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    for key in ["request", "research", "brief", "curriculum", "qa"]:
+        if key not in bundle:
+            errors.append(f"Missing top-level key: {key}")
+
+    qa = bundle.get("qa", {}) if isinstance(bundle.get("qa"), dict) else {}
+    qa_status = str(qa.get("status", "")).strip()
+    if qa_status not in {"pass", "fail"}:
+        warnings.append("qa.status is missing or not pass/fail.")
+
+    research = bundle.get("research", {}) if isinstance(bundle.get("research"), dict) else {}
+    sources = research.get("sources", []) if isinstance(research, dict) else []
+    source_ids = {
+        str(source.get("id", "")).strip()
+        for source in sources
+        if isinstance(source, dict) and str(source.get("id", "")).strip()
+    }
+
+    brief = bundle.get("brief", {}) if isinstance(bundle.get("brief"), dict) else {}
+    brief_refs = brief.get("references_used", []) if isinstance(brief, dict) else []
+    if isinstance(brief_refs, list):
+        invalid_brief_refs = [ref for ref in brief_refs if isinstance(ref, str) and ref not in source_ids]
+        if invalid_brief_refs:
+            warnings.append("brief.references_used has IDs not found in research.sources.")
+
+    curriculum = bundle.get("curriculum", {}) if isinstance(bundle.get("curriculum"), dict) else {}
+    modules = curriculum.get("modules", []) if isinstance(curriculum, dict) else []
+    if not isinstance(modules, list):
+        errors.append("curriculum.modules is not a list.")
+    else:
+        for module in modules:
+            if not isinstance(module, dict):
+                continue
+            module_sources = module.get("sources", [])
+            if not isinstance(module_sources, list):
+                continue
+            invalid_module_refs = [
+                ref for ref in module_sources if isinstance(ref, str) and ref not in source_ids
+            ]
+            if invalid_module_refs:
+                warnings.append("One or more curriculum.modules[].sources IDs are missing from research.sources.")
+                break
+
+    return {"ok": not errors, "errors": errors, "warnings": warnings}
 
 
 def _render_run_summary(summary: dict[str, Any]) -> None:
@@ -177,16 +227,33 @@ def main() -> None:
             ["M1 offline", "M2 web+fallback", "M3 web+serpapi"],
             index=0,
         )
-        mode_token = mode_label.split()[0]
+        mode = mode_label.split()[0]
+        if mode == "M1":
+            mode_flags = "--offline"
+        elif mode == "M2":
+            mode_flags = "--web --search-provider fallback"
+        elif mode == "M3":
+            mode_flags = "--web --search-provider serpapi"
+        else:
+            mode_flags = ""
 
         product = st.selectbox(
             "product override",
             ["auto", "power_bi", "power_apps", "power_platform", "enterprise_chatgpt", "generic"],
             index=0,
         )
+        if product == "auto":
+            product_flag = ""
+        else:
+            product_flag = f"--product {product}"
+
+        st.caption("Mode -> CLI Mapping:")
+        st.caption("M1 = --offline")
+        st.caption("M2 = --web --search-provider fallback")
+        st.caption("M3 = --web --search-provider serpapi")
 
         st.header("Execution (Step 5)")
-        out_dir = st.text_input("out_dir", value=str(state.get("out_dir") or "artifacts"))
+        out_dir = st.text_input("out_dir", value=str(state.get("out_dir") or "out/gui"))
         run_cwd = st.text_input("run_cwd", value=str(state.get("run_cwd") or ""))
         timeout_s = int(
             st.number_input(
@@ -201,21 +268,27 @@ def main() -> None:
             value=str(state.get("run_command_template") or ""),
             height=130,
         )
-        st.caption("Tokens available: {topic}, {audience}, {mode}, {product}, {out_dir}, {bundle_path}")
+        st.caption("Tokens available: {topic}, {audience}, {bundle_path}, {mode_flags}, {product_flag}")
         st.caption("Tip: edit the template to match your repo's actual CLI entrypoint.")
+        st.caption("Bundles are written under out_dir/<MODE>/bundle.json to avoid overwriting.")
 
         st.session_state["out_dir"] = out_dir
         st.session_state["run_cwd"] = run_cwd
         st.session_state["timeout_s"] = timeout_s
         st.session_state["run_command_template"] = command_template
+        st.session_state["mode_flags"] = mode_flags
+        st.session_state["product_flag"] = product_flag
 
+        escaped_topic = topic.replace('"', '\\"')
+        bundle_path = f"{out_dir}/{mode}/bundle.json"
+        os.makedirs(os.path.dirname(bundle_path), exist_ok=True)
+        os.makedirs(f"{out_dir}/logs", exist_ok=True)
         tokens = {
-            "topic": topic,
+            "topic": escaped_topic,
             "audience": audience,
-            "mode": mode_token,
-            "product": product,
-            "out_dir": out_dir,
-            "bundle_path": str(Path(out_dir) / "bundle.json"),
+            "bundle_path": bundle_path,
+            "mode_flags": mode_flags,
+            "product_flag": product_flag,
         }
 
         c_run, c_validate = st.columns(2)
@@ -223,19 +296,26 @@ def main() -> None:
         validate_clicked = c_validate.button("Validate only")
 
         if validate_clicked:
-            resolved = substitute_tokens(command_template, tokens)
-            parsed = parse_command(resolved)
-            validate_result = {
-                "resolved_command": resolved,
-                "command": parsed,
-                "returncode": 0 if parsed else 2,
-                "ok": bool(parsed),
-                "stderr": "" if parsed else "Template resolved to an empty command.",
-            }
-            if parsed:
-                st.success("Template parsed successfully.")
+            st.warning("CLI does not expose a validation-only flag; performing GUI-side validation only.")
+            bundle = st.session_state.get("bundle")
+            if isinstance(bundle, dict):
+                gui_validation = _validate_loaded_bundle(bundle)
+                validate_result = {
+                    "ok": gui_validation["ok"],
+                    "errors": gui_validation["errors"],
+                    "warnings": gui_validation["warnings"],
+                }
+                if gui_validation["ok"]:
+                    st.success("GUI-side bundle validation passed.")
+                else:
+                    st.error("GUI-side bundle validation failed.")
             else:
-                st.error("Template is invalid or empty.")
+                validate_result = {
+                    "ok": False,
+                    "errors": ["No loaded bundle available for GUI-side validation."],
+                    "warnings": [],
+                }
+                st.error("No loaded bundle available for validation.")
 
         if run_clicked:
             result = run_pipeline_from_template(
@@ -243,7 +323,7 @@ def main() -> None:
                 tokens,
                 cwd=run_cwd.strip() or None,
                 timeout_s=timeout_s,
-                log_dir=str(Path(out_dir) / "logs"),
+                log_dir=f"{out_dir}/logs",
             )
             st.session_state["last_run_result"] = result
 
@@ -252,10 +332,10 @@ def main() -> None:
                 st.write(f"return code: {result.get('returncode')}")
 
             if result.get("ok") and isinstance(result.get("bundle_path"), str):
-                bundle_path = str(result["bundle_path"])
+                resolved_bundle_path = str(result["bundle_path"])
                 try:
-                    st.session_state["bundle"] = load_bundle_from_path(bundle_path)
-                    st.session_state["last_bundle_path"] = bundle_path
+                    st.session_state["bundle"] = load_bundle_from_path(resolved_bundle_path)
+                    st.session_state["last_bundle_path"] = resolved_bundle_path
                     st.session_state["last_loaded_at"] = datetime.now().isoformat(timespec="seconds")
                     st.success("Pipeline run succeeded and bundle was loaded.")
                 except ValueError as exc:
@@ -265,15 +345,12 @@ def main() -> None:
 
         if isinstance(validate_result, dict):
             with st.expander("Validation result", expanded=False):
-                st.code(validate_result.get("resolved_command", ""), language="bash")
-                st.write(f"return code: {validate_result.get('returncode')}")
-                if validate_result.get("stderr"):
-                    st.code(str(validate_result["stderr"]), language="text")
+                st.write(validate_result)
 
         st.header("Bundle Loading")
         path_value = st.text_input(
             "last_bundle_path",
-            value=str(state.get("last_bundle_path") or "artifacts/bundle.json"),
+            value=str(state.get("last_bundle_path") or "out/gui/M1/bundle.json"),
         )
         st.session_state["last_bundle_path"] = path_value
 

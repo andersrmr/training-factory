@@ -129,8 +129,9 @@ def run_pipeline_from_template(
     started_at = started_dt.isoformat(timespec="seconds")
     started_clock = time.perf_counter()
 
-    resolved_command = substitute_tokens(template, tokens)
-    command = parse_command(resolved_command)
+    resolved_command_str = substitute_tokens(template, tokens)
+    resolved_command_str = " ".join(resolved_command_str.split())
+    command = parse_command(resolved_command_str)
 
     if command:
         returncode, stdout, stderr = run_command(command, cwd, env_overrides=None, timeout_s=timeout_s)

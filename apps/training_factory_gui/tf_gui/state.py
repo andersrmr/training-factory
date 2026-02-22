@@ -3,11 +3,11 @@ from __future__ import annotations
 import streamlit as st
 
 
-_DEFAULT_LAST_BUNDLE_PATH = "artifacts/bundle.json"
-_DEFAULT_OUT_DIR = "artifacts"
+_DEFAULT_LAST_BUNDLE_PATH = "out/gui/M1/bundle.json"
+_DEFAULT_OUT_DIR = "out/gui"
 _DEFAULT_RUN_TEMPLATE = (
-    'python -m training_factory --topic "{topic}" --audience "{audience}" '
-    '--research "{mode}" --product "{product}" --out "{out_dir}"'
+    'python -m training_factory.cli generate --topic "{topic}" --audience {audience} '
+    '--out "{bundle_path}" {mode_flags} {product_flag}'
 )
 
 
@@ -28,6 +28,10 @@ def init_state_defaults() -> None:
         st.session_state["last_run_result"] = None
     if "timeout_s" not in st.session_state:
         st.session_state["timeout_s"] = 600
+    if "mode_flags" not in st.session_state:
+        st.session_state["mode_flags"] = ""
+    if "product_flag" not in st.session_state:
+        st.session_state["product_flag"] = ""
 
 
 def get_state() -> dict[str, object]:
@@ -41,6 +45,8 @@ def get_state() -> dict[str, object]:
         "out_dir": st.session_state.get("out_dir"),
         "last_run_result": st.session_state.get("last_run_result"),
         "timeout_s": st.session_state.get("timeout_s"),
+        "mode_flags": st.session_state.get("mode_flags"),
+        "product_flag": st.session_state.get("product_flag"),
     }
 
 
