@@ -1,7 +1,17 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["request", "brief", "curriculum", "lab", "slides", "templates", "qa"],
+  "required": [
+    "request",
+    "research",
+    "research_qa",
+    "brief",
+    "curriculum",
+    "lab",
+    "slides",
+    "templates",
+    "qa"
+  ],
   "properties": {
     "request": {
       "type": "object",
@@ -49,6 +59,117 @@
             },
             "additionalProperties": false
           }
+        }
+      },
+      "additionalProperties": false
+    },
+    "research": {
+      "type": "object",
+      "required": ["query_plan", "sources", "context_pack"],
+      "properties": {
+        "query_plan": {
+          "type": "object",
+          "required": ["queries", "intent_keywords", "preferred_domains"],
+          "properties": {
+            "queries": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "intent_keywords": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "preferred_domains": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "additionalProperties": false
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "title",
+              "url",
+              "domain",
+              "publisher",
+              "doc_type",
+              "authority_tier",
+              "score",
+              "snippets"
+            ],
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "url": { "type": "string" },
+              "domain": { "type": "string" },
+              "publisher": { "type": "string" },
+              "doc_type": { "type": "string" },
+              "authority_tier": { "type": "string", "enum": ["A", "B", "C", "D"] },
+              "score": { "type": "number" },
+              "snippets": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["heading", "text", "loc"],
+                  "properties": {
+                    "heading": { "type": "string" },
+                    "text": { "type": "string" },
+                    "loc": { "type": "string" }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "context_pack": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "research_qa": {
+      "type": "object",
+      "required": ["status", "checks", "metrics"],
+      "properties": {
+        "status": { "type": "string", "enum": ["pass", "fail"] },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["prompt", "answer"],
+            "properties": {
+              "prompt": { "type": "string" },
+              "answer": { "type": "string", "enum": ["Yes", "No"] }
+            },
+            "additionalProperties": false
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "required": ["tier_counts", "domain_counts", "keyword_coverage_ratio"],
+          "properties": {
+            "tier_counts": {
+              "type": "object",
+              "required": ["A", "B", "C", "D"],
+              "properties": {
+                "A": { "type": "integer", "minimum": 0 },
+                "B": { "type": "integer", "minimum": 0 },
+                "C": { "type": "integer", "minimum": 0 },
+                "D": { "type": "integer", "minimum": 0 }
+              },
+              "additionalProperties": false
+            },
+            "domain_counts": {
+              "type": "object",
+              "additionalProperties": { "type": "integer", "minimum": 0 }
+            },
+            "keyword_coverage_ratio": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

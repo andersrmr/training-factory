@@ -8,6 +8,7 @@ from training_factory.agents.curriculum import generate_curriculum
 from training_factory.agents.lab import generate_lab
 from training_factory.agents.qa import generate_qa
 from training_factory.agents.research import generate_research
+from training_factory.agents.research_qa import generate_research_qa
 from training_factory.agents.slides import generate_slides
 from training_factory.agents.templates import generate_templates
 from training_factory.state import TrainingState
@@ -20,6 +21,7 @@ SCHEMA_DIR = ROOT_DIR / "schemas"
 class GraphState(TypedDict):
     request: dict[str, Any]
     research: dict[str, Any]
+    research_qa: dict[str, Any]
     brief: dict[str, Any]
     curriculum: dict[str, Any]
     lab: dict[str, Any]
@@ -27,6 +29,7 @@ class GraphState(TypedDict):
     templates: dict[str, Any]
     qa: dict[str, Any]
     packaging: dict[str, Any]
+    research_revision_count: int
     revision_count: int
 
 
@@ -38,6 +41,16 @@ def _research_node(state: GraphState) -> dict[str, Any]:
 def _brief_node(state: GraphState) -> dict[str, Any]:
     brief = generate_brief(state["request"], state.get("research", {}))
     return {"brief": brief}
+
+
+def _research_qa_node(state: GraphState) -> dict[str, Any]:
+    research_qa = generate_research_qa(state.get("research", {}), state["request"])
+    return {"research_qa": research_qa}
+
+
+def _research_retry_node(state: GraphState) -> dict[str, Any]:
+    revision_count = int(state.get("research_revision_count", 0))
+    return {"research_revision_count": revision_count + 1}
 
 
 def _curriculum_node(state: GraphState) -> dict[str, Any]:
@@ -75,6 +88,14 @@ def _route_after_qa(state: GraphState) -> str:
     if qa_status == "fail" and revision_count < 1:
         return "slides"
     return "package"
+
+
+def _route_after_research_qa(state: GraphState) -> str:
+    research_qa_status = state.get("research_qa", {}).get("status")
+    revision_count = int(state.get("research_revision_count", 0))
+    if research_qa_status == "fail" and revision_count < 1:
+        return "research_retry"
+    return "brief"
 
 
 def _canonicalize_lab_for_bundle(lab: dict[str, Any]) -> dict[str, Any]:
@@ -133,6 +154,8 @@ def _package_node(state: GraphState) -> dict[str, Any]:
     templates = _canonicalize_templates_for_bundle(state["templates"])
     packaging = {
         "request": state["request"],
+        "research": state["research"],
+        "research_qa": state["research_qa"],
         "brief": state["brief"],
         "curriculum": state["curriculum"],
         "lab": lab,
@@ -150,6 +173,8 @@ def _package_node(state: GraphState) -> dict[str, Any]:
 def build_graph():
     graph = StateGraph(GraphState)
     graph.add_node("research", _research_node)
+    graph.add_node("research_qa", _research_qa_node)
+    graph.add_node("research_retry", _research_retry_node)
     graph.add_node("brief", _brief_node)
     graph.add_node("curriculum", _curriculum_node)
     graph.add_node("slides", _slides_node)
@@ -159,7 +184,13 @@ def build_graph():
     graph.add_node("package", _package_node)
 
     graph.add_edge(START, "research")
-    graph.add_edge("research", "brief")
+    graph.add_edge("research", "research_qa")
+    graph.add_conditional_edges(
+        "research_qa",
+        _route_after_research_qa,
+        {"research_retry": "research_retry", "brief": "brief"},
+    )
+    graph.add_edge("research_retry", "research")
     graph.add_edge("brief", "curriculum")
     graph.add_edge("curriculum", "slides")
     graph.add_edge("slides", "lab")
