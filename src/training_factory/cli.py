@@ -84,6 +84,7 @@ def generate(
     bundle = _extract_bundle(state)
     validate_json(bundle, SCHEMA_PATH)
 
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")
 
     brief_topic = bundle.get("brief", {}).get("topic")
