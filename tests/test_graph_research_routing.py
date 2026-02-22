@@ -161,7 +161,11 @@ def test_research_qa_fail_retries_once_then_proceeds(monkeypatch) -> None:
     monkeypatch.setattr(graph_module, "generate_slides", _slides)
     monkeypatch.setattr(graph_module, "generate_lab", _lab)
     monkeypatch.setattr(graph_module, "generate_templates", _templates)
-    monkeypatch.setattr(graph_module, "generate_qa", lambda *_args: {"status": "pass", "checks": []})
+    monkeypatch.setattr(
+        graph_module,
+        "generate_qa",
+        lambda _slides, _lab, _templates, _curriculum, _research: {"status": "pass", "checks": []},
+    )
     monkeypatch.setattr(graph_module, "validate_json", lambda *_args, **_kwargs: None)
 
     graph = build_graph()
@@ -236,7 +240,11 @@ def test_research_retry_does_not_overwrite_research_payload(monkeypatch) -> None
     monkeypatch.setattr(graph_module, "generate_slides", _slides)
     monkeypatch.setattr(graph_module, "generate_lab", _lab)
     monkeypatch.setattr(graph_module, "generate_templates", _templates)
-    monkeypatch.setattr(graph_module, "generate_qa", lambda *_args: {"status": "pass", "checks": []})
+    monkeypatch.setattr(
+        graph_module,
+        "generate_qa",
+        lambda _slides, _lab, _templates, _curriculum, _research: {"status": "pass", "checks": []},
+    )
     monkeypatch.setattr(graph_module, "validate_json", lambda *_args, **_kwargs: None)
 
     graph = build_graph()

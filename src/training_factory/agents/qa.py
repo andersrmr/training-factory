@@ -86,8 +86,52 @@ def _is_plausible_markdown(text: str) -> bool:
     return len(stripped) >= 20 and ("\n" in stripped or stripped.startswith("#"))
 
 
+def _research_ids(research: dict[str, Any]) -> set[str]:
+    ids: set[str] = set()
+    sources = research.get("sources", [])
+    if not isinstance(sources, list):
+        return ids
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        source_id = source.get("id")
+        if isinstance(source_id, str) and source_id.strip():
+            ids.add(source_id.strip())
+    return ids
+
+
+def _curriculum_references_valid(curriculum: dict[str, Any], valid_ids: set[str]) -> bool:
+    references_used = curriculum.get("references_used")
+    if not isinstance(references_used, list) or not references_used:
+        return False
+    for item in references_used:
+        if not isinstance(item, str) or not item.strip() or item.strip() not in valid_ids:
+            return False
+    return True
+
+
+def _module_sources_valid(curriculum: dict[str, Any], valid_ids: set[str]) -> bool:
+    modules = curriculum.get("modules")
+    if not isinstance(modules, list) or not modules:
+        return False
+    for module in modules:
+        if not isinstance(module, dict):
+            return False
+        sources = module.get("sources")
+        if not isinstance(sources, list) or not sources:
+            return False
+        for source_id in sources:
+            if not isinstance(source_id, str) or not source_id.strip() or source_id.strip() not in valid_ids:
+                return False
+    return True
+
+
 def generate_qa(
-    slides: dict[str, Any], lab: dict[str, Any], templates: dict[str, Any]
+    slides: dict[str, Any],
+    lab: dict[str, Any],
+    templates: dict[str, Any],
+    curriculum: dict[str, Any],
+    research: dict[str, Any],
 ) -> dict[str, Any]:
     lab_has_structure = _has_steps_and_checkpoints(lab)
     slides_have_content = bool(_slide_text(slides))
@@ -95,6 +139,9 @@ def generate_qa(
     has_readme = bool(_template_content(templates, "README.md"))
     has_runbook = bool(_template_content(templates, "RUNBOOK.md"))
     templates_align = _templates_align_with_materials(slides, lab, templates)
+    research_ids = _research_ids(research)
+    has_valid_curriculum_refs = _curriculum_references_valid(curriculum, research_ids)
+    has_valid_module_sources = _module_sources_valid(curriculum, research_ids)
 
     checks = [
         {
@@ -121,6 +168,14 @@ def generate_qa(
             "prompt": "Do templates align with slides and lab?",
             "answer": "Yes" if templates_align else "No",
         },
+        {
+            "prompt": "Does curriculum include references_used and are they valid research source IDs?",
+            "answer": "Yes" if has_valid_curriculum_refs else "No",
+        },
+        {
+            "prompt": "Does each curriculum module include sources and are they valid research source IDs?",
+            "answer": "Yes" if has_valid_module_sources else "No",
+        },
     ]
 
     status = "pass" if all(item["answer"] == "Yes" for item in checks) else "fail"
@@ -129,7 +184,11 @@ def generate_qa(
         _template_content(templates, "RUNBOOK.md")
     )
     offline_stub = {
-        "status": "pass" if offline_templates_ok else "fail",
+        "status": (
+            "pass"
+            if (offline_templates_ok and has_valid_curriculum_refs and has_valid_module_sources)
+            else "fail"
+        ),
         "checks": [
             {
                 "prompt": "Do templates include non-empty plausible README.md content?",
@@ -138,6 +197,14 @@ def generate_qa(
             {
                 "prompt": "Do templates include non-empty plausible RUNBOOK.md content?",
                 "answer": "Yes" if _is_plausible_markdown(_template_content(templates, "RUNBOOK.md")) else "No",
+            },
+            {
+                "prompt": "Does curriculum include references_used and are they valid research source IDs?",
+                "answer": "Yes" if has_valid_curriculum_refs else "No",
+            },
+            {
+                "prompt": "Does each curriculum module include sources and are they valid research source IDs?",
+                "answer": "Yes" if has_valid_module_sources else "No",
             },
         ],
     }
@@ -151,8 +218,11 @@ def generate_qa(
         "(3) lab exists and has steps/checkpoints, "
         "(4) templates includes README.md, "
         "(5) templates includes RUNBOOK.md, "
-        "(6) templates align with slides and lab (README + RUNBOOK consistent). "
-        f"Slides: {json.dumps(slides)}. Lab: {json.dumps(lab)}. Templates: {json.dumps(templates)}"
+        "(6) templates align with slides and lab (README + RUNBOOK consistent), "
+        "(7) curriculum references_used exists and cites valid research source IDs, "
+        "(8) each curriculum module includes sources with valid research source IDs. "
+        f"Slides: {json.dumps(slides)}. Lab: {json.dumps(lab)}. Templates: {json.dumps(templates)}. "
+        f"Curriculum: {json.dumps(curriculum)}. Research: {json.dumps(research)}"
     )
 
     def _normalize(payload: dict) -> dict:

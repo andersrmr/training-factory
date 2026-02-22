@@ -79,7 +79,13 @@ def _templates_node(state: GraphState) -> dict[str, Any]:
 
 
 def _qa_node(state: GraphState) -> dict[str, Any]:
-    qa = generate_qa(state["slides"], state["lab"], state["templates"])
+    qa = generate_qa(
+        state["slides"],
+        state["lab"],
+        state["templates"],
+        state["curriculum"],
+        state["research"],
+    )
     return {"qa": qa}
 
 
