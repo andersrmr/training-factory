@@ -1,100 +1,97 @@
-# Training Factory
+# Training Factory  
+## Deterministic, Governance-Grounded Technical Training Generation
 
-Training Factory is a LangGraph-based pipeline that generates structured technical training assets from a topic and audience.
+Training Factory is a governance-first system for generating structured technical training assets from a single input request (**topic** + **audience**).
 
-Given one input request, it produces a validated bundle with:
+Unlike generic LLM pipelines, Training Factory emphasizes:
 
-- Brief
-- Curriculum
-- Slides
-- Lab
-- Templates (`README` + `RUNBOOK`)
-- QA report
+- Deterministic behavior  
+- Authority-tiered research grounding  
+- Product-aware retrieval  
+- Bounded retry logic  
+- Schema-validated outputs  
+- Reproducible evaluation across research modes  
 
-All major artifacts are schema-validated JSON, which keeps outputs predictable and easy to automate against.
+The system produces a validated training bundle with:
 
-## Features
+- Brief  
+- Curriculum  
+- Slides  
+- Lab  
+- Templates (`README` + `RUNBOOK`)  
+- QA report  
+- Source provenance  
 
-- Graph-driven orchestration with explicit state transitions
-- Bounded QA retry loop (`qa fail` retries once from `slides`)
-- Schema-first output validation
-- CLI for local generation
-- Offline deterministic test path
+All artifacts are structured, schema-validated JSON, making outputs predictable, testable, and automation-ready.
 
-## CLI Usage
+---
 
-Generate a bundle:
+## Why This Project Exists
 
-```bash
-python -m training_factory generate \
-  --topic "Power BI basics" \
-  --audience novice
-```
+Most AI-generated training content suffers from:
 
-Write output to a file:
+- Unverifiable sourcing  
+- Inconsistent structure  
+- Opaque retry behavior  
+- Unbounded hallucination risk  
+- Non-reproducible outputs  
 
-```bash
-python -m training_factory generate \
-  --topic "Power BI basics" \
-  --audience novice \
-  --out out/bundle_powerbi.json
-```
+Training Factory was built to explore a different approach:
 
-Run in offline mode (no external model calls):
+> What if training generation behaved more like a governed system than a prompt experiment?
 
-```bash
-python -m training_factory generate \
-  --topic "Power BI basics" \
-  --audience novice \
-  --offline
-```
+The result is a multi-agent pipeline with deterministic ranking, authority enforcement, and explicit lifecycle validation.
 
-## Offline Deterministic Tests
+---
 
-The test suite is designed to be deterministic and runnable without network dependencies.
+## Core Capabilities
 
-Run tests:
+### 1) Authority-Tiered Research Layer
 
-```bash
-pytest -q
-```
+The research stage ranks sources deterministically using:
 
-Key guarantees:
+- Authority tiers (A/B/C/D)
+- Keyword overlap scoring
+- Product-aware anchor queries
+- Preferred-domain boosts
+- Domain diversity constraints
+- Sensitive-topic enforcement (e.g., Tier A requirement for sensitive topics)
 
-- No live model call requirement for tests
-- Stable routing and packaging assertions
-- Schema validation on final bundle payloads
+No embeddings.  
+No vector database.  
+Fully explainable ranking.
 
-## Repository Layout
+---
 
-```text
-training-factory/
-├─ src/training_factory/
-│  ├─ agents/           # brief/curriculum/slides/lab/templates/qa agents
-│  ├─ graph.py          # LangGraph wiring and routing logic
-│  ├─ state.py          # shared pipeline state model
-│  ├─ cli.py            # Typer CLI entrypoint
-│  └─ utils/            # schema + structured-output helpers
-├─ schemas/             # JSON Schemas for artifacts and final bundle
-├─ tests/               # routing, smoke, CLI, and utility tests
-└─ out/                 # generated bundles (example outputs)
-```
+### 2) Multi-Mode Research Architecture
 
-## Architecture
+The system supports three deterministic research modes:
 
-Pipeline order:
+| Mode | CLI Flags | Behavior |
+|------|-----------|----------|
+| **M1** | `--offline` | Deterministic curated sources only |
+| **M2** | `--web --search-provider fallback` | Controlled web recall |
+| **M3** | `--web --search-provider serpapi` | Expanded web recall with authority diversity |
 
-`START -> brief -> curriculum -> slides -> lab -> templates -> qa -> (slides | package) -> END`
+This enables reproducible comparisons across research depth and authority diversity.
 
-Retry behavior:
+---
 
-- If `qa.status == "fail"` and `revision_count < 1`, route back to `slides`
-- Then continue `slides -> lab -> templates -> qa`
-- Otherwise route to `package`
+### 3) LangGraph-Orchestrated Generation
+
+Pipeline order: `research → research_qa → brief → curriculum → slides → lab → templates → qa → package`
+
+Retry rules are bounded and deterministic:
+
+- `research_qa` retries once if authority/coverage thresholds fail
+- `qa` retries once from `slides` if validation fails
+- No unbounded loops
 
 ```mermaid
 flowchart TD
-    START([START]) --> brief[brief]
+    START([START]) --> research[research]
+    research --> research_qa[research_qa]
+    research_qa --> brief[brief]
     brief --> curriculum[curriculum]
     curriculum --> slides[slides]
     slides --> lab[lab]
@@ -105,23 +102,180 @@ flowchart TD
     package --> END([END])
 ```
 
+### 4) Governance & QA Enforcement
+
+Validation checks include:
+
+- Minimum source count
+- Authority-tier threshold compliance
+- Keyword coverage ratio
+- Domain concentration limits
+- Citation propagation integrity
+- Schema validation on all artifacts
+
+Sensitive topics require Tier A authority (e.g., NIST).
+
+### 5) Evaluation Harness
+
+Training Factory includes a lightweight evaluation framework:
+- Runs test cases across M1/M2/M3
+- Captures:
+  - Tier counts
+  - Domain diversity
+  - Keyword coverage
+  - QA status
+  - Retry events
+- Produces structured CSV comparison outputs
+
+This makes research-mode behavior measurable and reproducible.
+
+## Streamlit Governance GUI
+
+Launch the GUI:
+```bash
+streamlit run apps/training_factory_gui/app.py
+```
+
+Capabilities:
+
+- Topic / audience / mode selection
+- Deterministic CLI execution
+- Mode-scoped outputs (out_dir/<MODE>/bundle.json)
+- Run history + manifests
+- Log inspection
+- Bundle viewer
+- Mode comparison panel
+
+The GUI exposes system behavior transparently without hiding CLI execution.
+
+## CLI Usage
+
+Generate a bundle (M1 offline):
+```bash
+python -m training_factory.cli generate \
+  --topic "Power BI basics" \
+  --audience novice \
+  --out out/eval/phase_a/C1/M1/bundle.json \
+  --offline
+```
+
+M2 (web + fallback):
+```bash
+python -m training_factory.cli generate \
+  --topic "Power BI basics" \
+  --audience novice \
+  --out out/eval/phase_a/C1/M2/bundle.json \
+  --web --search-provider fallback
+```
+
+M3 (web + serpapi):
+```bash
+python -m training_factory.cli generate \
+  --topic "Power BI basics" \
+  --audience novice \
+  --out out/eval/phase_a/C1/M3/bundle.json \
+  --web --search-provider serpapi
+```
+
+Write to a specific output path:
+```bash
+--out out/eval/phase_a/C1/M3/bundle.json
+```
+## Determinism & Testing Guarantees
+
+Run tests:
+```bash
+pytest -q
+```
+Key guarantees:
+
+- Offline deterministic execution path for tests (no network dependency)
+- No live model call requirement for tests
+- Schema validation on final bundles
+- Stable routing assertions
+- Structured output contracts
+- Output Contract
+
 ## Output Contract
 
-The packaged bundle includes:
+Each packaged bundle includes:
 
-- `request`
-- `brief`
-- `curriculum`
-- `slides`
-- `lab`
-- `templates`
-- `qa`
-
-The `templates` payload is canonicalized to:
-
-```json
+```JSON
+{
+  "request": {},
+  "research": {},
+  "brief": {},
+  "curriculum": {},
+  "slides": {},
+  "lab": {},
+  "templates": {},
+  "qa": {}
+}
+```
+Templates are canonicalized as:
+```JSON
 {
   "readme_md": { "content": "..." },
   "runbook_md": { "content": "..." }
 }
 ```
+All artifacts are JSON schema validated.
+
+## Repository Layout
+
+```code
+training-factory/
+├─ src/training_factory/
+│  ├─ agents/
+│  ├─ research/
+│  ├─ graph.py
+│  ├─ state.py
+│  ├─ cli.py
+│  └─ utils/
+├─ schemas/
+├─ tests/
+├─ apps/
+│  └─ training_factory_gui/
+└─ out/
+```
+
+## Technical Deep Dive (For Engineers)
+
+Research Layer
+
+- SearchProvider protocol abstraction
+- Deterministic scoring model
+- Authority-tier weighting
+- Product detection (_detect_product)
+- Anchor queries for Microsoft/enterprise tools
+- Diversity rule (max 2 per non-Tier-A domain)
+- Context pack bounded (e.g., ≤6000 chars)
+
+No vector DB.  
+No embeddings.  
+No semantic retrieval.
+
+Tradeoff: Explainability and reproducibility over fuzzy semantic recall.
+
+### Generation Strategy
+
+- Structured output enforced via JSON schema
+- Agents operate on explicit state model
+- Retry counters tracked in state
+- Citation IDs validated against research source list
+- No hidden mutation of bundle payload
+
+### Design Principles
+
+- Determinism over randomness
+- Governance over novelty
+- Structured output over prose generation
+- Bounded retries over recursive loops
+- Measurable evaluation over anecdotal quality
+
+### Status
+
+Phase 2: Research layer maturity complete
+Phase 3: GUI and execution framework complete
+
+The system is architecturally stable and reproducible.
