@@ -15,8 +15,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from training_factory.graph import run_pipeline
 from training_factory.settings import get_settings
 
-PHASE = "phase_b"
-
 CASES: dict[str, dict[str, str]] = {
     "C1": {"topic": "Power BI fundamentals", "audience": "novice"},
     "C2": {"topic": "Power Apps basics", "audience": "intermediate"},
@@ -28,12 +26,33 @@ CASES: dict[str, dict[str, str]] = {
         "topic": "Power Platform ALM governance best practices",
         "audience": "intermediate",
     },
+    "C5": {
+        "topic": "Enterprise ChatGPT best practices for regulated industries",
+        "audience": "intermediate",
+    },
+    "C6": {
+        "topic": "Power BI tenant governance, security, and deployment controls",
+        "audience": "intermediate",
+    },
 }
 
 MODES: dict[str, dict[str, Any]] = {
     "M1": {"offline": True, "web": False, "search_provider": "offline"},
     "M2": {"offline": False, "web": True, "search_provider": "fallback"},
     "M3": {"offline": False, "web": True, "search_provider": "serpapi"},
+}
+
+PHASE_DEFAULTS: dict[str, dict[str, Any]] = {
+    "phase_b": {
+        "out_root": "out/eval/phase_b",
+        "cases": ["C1", "C2", "C3", "C4"],
+        "modes": ["M1", "M2", "M3"],
+    },
+    "phase_c": {
+        "out_root": "out/eval/phase_c",
+        "cases": ["C5", "C6"],
+        "modes": ["M2", "M3"],
+    },
 }
 
 CSV_COLUMNS = [
@@ -135,6 +154,7 @@ def _parse_ids(value: str, valid: list[str], label: str) -> list[str]:
 
 def run_eval(
     *,
+    phase: str = "phase_b",
     out_root: str | Path = "out/eval/phase_b",
     case_ids: list[str] | None = None,
     mode_ids: list[str] | None = None,
@@ -192,7 +212,7 @@ def run_eval(
             qa_checks = qa_checks if isinstance(qa_checks, list) else []
 
             row = {
-                "phase": PHASE,
+                "phase": phase,
                 "case_id": case_id,
                 "mode_id": mode_id,
                 "topic": topic,
@@ -227,27 +247,42 @@ def run_eval(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run Phase B eval matrix and write CSV summary.")
-    parser.add_argument("--out-root", default="out/eval/phase_b", help="Output root directory.")
+    parser = argparse.ArgumentParser(description="Run eval matrix and write CSV summary.")
+    parser.add_argument(
+        "--phase",
+        choices=sorted(PHASE_DEFAULTS.keys()),
+        default="phase_b",
+        help="Phase preset for default output/cases/modes.",
+    )
+    parser.add_argument("--out-root", default="", help="Output root directory.")
     parser.add_argument(
         "--cases",
-        default="C1,C2,C3,C4",
-        help="Comma-separated case IDs (default: C1,C2,C3,C4).",
+        default="",
+        help="Comma-separated case IDs.",
     )
     parser.add_argument(
         "--modes",
-        default="M1,M2,M3",
-        help="Comma-separated mode IDs (default: M1,M2,M3).",
+        default="",
+        help="Comma-separated mode IDs.",
     )
     args = parser.parse_args()
 
+    defaults = PHASE_DEFAULTS[args.phase]
     try:
-        case_ids = _parse_ids(args.cases, list(CASES.keys()), "case IDs")
-        mode_ids = _parse_ids(args.modes, list(MODES.keys()), "mode IDs")
+        case_value = args.cases or ",".join(defaults["cases"])
+        mode_value = args.modes or ",".join(defaults["modes"])
+        case_ids = _parse_ids(case_value, list(CASES.keys()), "case IDs")
+        mode_ids = _parse_ids(mode_value, list(MODES.keys()), "mode IDs")
     except ValueError as exc:
         raise SystemExit(str(exc))
 
-    summary = run_eval(out_root=args.out_root, case_ids=case_ids, mode_ids=mode_ids)
+    out_root = args.out_root or str(defaults["out_root"])
+    summary = run_eval(
+        phase=args.phase,
+        out_root=out_root,
+        case_ids=case_ids,
+        mode_ids=mode_ids,
+    )
     print(f"Wrote summary to {summary}")
 
 
