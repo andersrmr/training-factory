@@ -226,6 +226,8 @@ def generate_research(request: dict[str, Any]) -> dict[str, Any]:
         item["id"] = f"src_{idx:03d}"
 
     if web and selected:
+        enrichment_keywords = list(query_plan["intent_keywords"])
+        enrichment_keywords.extend(sorted(_tokenize(topic)))
         tier_priority = {"A": 0, "B": 1, "C": 2, "D": 3}
         candidate_order = sorted(
             range(len(selected)),
@@ -238,7 +240,11 @@ def generate_research(request: dict[str, Any]) -> dict[str, Any]:
         for source_idx in candidate_order[:_MAX_ENRICHED_SOURCES]:
             source = selected[source_idx]
             html = fetch_extract.fetch_url(str(source.get("url", "")))
-            enriched_snippets = fetch_extract.extract_snippets(html, max_snippets=4)
+            enriched_snippets = fetch_extract.extract_snippets(
+                html,
+                intent_keywords=enrichment_keywords,
+                max_snippets=4,
+            )
             if enriched_snippets:
                 source["snippets"] = (enriched_snippets + list(source.get("snippets", [])))[:4]
             source["retrieved_at"] = date.today().isoformat()

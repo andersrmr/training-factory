@@ -14,6 +14,8 @@ def test_research_enriches_snippets_from_html_when_web_enabled(monkeypatch) -> N
     html_fixture = """
     <html>
       <body>
+        <p>This browser is no longer supported.</p>
+        <p>Access to this page requires authorization. Try signing in.</p>
         <h1>Title</h1>
         <h2>Governance</h2>
         <p>Governance best practices include environment separation.</p>
@@ -43,6 +45,12 @@ def test_research_enriches_snippets_from_html_when_web_enabled(monkeypatch) -> N
     assert any(
         "environment separation" in snippet.get("text", "").lower()
         or "managed solutions" in snippet.get("text", "").lower()
+        for source in sources
+        for snippet in source.get("snippets", [])
+    )
+    assert all(
+        "browser is no longer supported" not in snippet.get("text", "").lower()
+        and "authorization" not in snippet.get("text", "").lower()
         for source in sources
         for snippet in source.get("snippets", [])
     )

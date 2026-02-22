@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from training_factory.research.fallback_provider import SimpleFallbackSearchProvider
+import training_factory.research.registry as registry_module
 from training_factory.research.registry import get_search_provider
 
 
@@ -11,6 +14,11 @@ def test_registry_default_returns_fallback() -> None:
 
 def test_registry_serpapi_without_key_falls_back(monkeypatch) -> None:
     monkeypatch.delenv("SERPAPI_API_KEY", raising=False)
+    monkeypatch.setattr(
+        registry_module,
+        "get_settings",
+        lambda: SimpleNamespace(serpapi_api_key=None),
+    )
     provider = get_search_provider("serpapi")
     assert isinstance(provider, SimpleFallbackSearchProvider)
 
