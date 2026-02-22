@@ -48,6 +48,7 @@
           "domain": { "type": "string", "minLength": 1 },
           "publisher": { "type": "string" },
           "doc_type": { "type": "string" },
+          "retrieved_at": { "type": "string" },
           "authority_tier": { "type": "string", "enum": ["A", "B", "C", "D"] },
           "score": { "type": "number" },
           "snippets": {

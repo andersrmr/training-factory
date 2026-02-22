@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 from urllib.parse import urlparse
 
+from training_factory.research import fetch_extract
 from training_factory.research.providers import SearchResult
 from training_factory.research.registry import get_search_provider
 
 _MAX_CONTEXT_PACK_CHARS = 6000
 _MAX_RESULTS_PER_QUERY = 10
 _MAX_SELECTED_SOURCES = 8
+_MAX_ENRICHED_SOURCES = 4
 _DOMAIN_CAP = 2
 
 _TIER_A_DOMAINS = {
@@ -221,6 +224,24 @@ def generate_research(request: dict[str, Any]) -> dict[str, Any]:
 
     for idx, item in enumerate(selected, start=1):
         item["id"] = f"src_{idx:03d}"
+
+    if web and selected:
+        tier_priority = {"A": 0, "B": 1, "C": 2, "D": 3}
+        candidate_order = sorted(
+            range(len(selected)),
+            key=lambda idx: (
+                tier_priority.get(str(selected[idx].get("authority_tier", "D")), 9),
+                -float(selected[idx].get("score", 0.0)),
+                str(selected[idx].get("url", "")),
+            ),
+        )
+        for source_idx in candidate_order[:_MAX_ENRICHED_SOURCES]:
+            source = selected[source_idx]
+            html = fetch_extract.fetch_url(str(source.get("url", "")))
+            enriched_snippets = fetch_extract.extract_snippets(html, max_snippets=4)
+            if enriched_snippets:
+                source["snippets"] = (enriched_snippets + list(source.get("snippets", [])))[:4]
+            source["retrieved_at"] = date.today().isoformat()
 
     context_pack = _build_context_pack(topic, audience, selected)
     return {
