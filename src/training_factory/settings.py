@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
     openai_temperature: float = Field(default=0.0, alias="OPENAI_TEMPERATURE")
+    serpapi_api_key: str | None = Field(default=None, alias="SERPAPI_API_KEY")
     training_factory_offline: bool = Field(default=False, alias="TRAINING_FACTORY_OFFLINE")
     test_mode: bool = Field(default=False, alias="TEST_MODE")
 

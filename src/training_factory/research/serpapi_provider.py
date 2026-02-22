@@ -5,6 +5,7 @@ import os
 from typing import Any
 
 from training_factory.research.providers import SearchProvider, SearchResult
+from training_factory.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +14,10 @@ class SerpApiSearchProvider(SearchProvider):
     _endpoint = "https://serpapi.com/search.json"
 
     def __init__(self, api_key: str | None = None, *, timeout_seconds: float = 10.0) -> None:
-        self._api_key = api_key or os.getenv("SERPAPI_API_KEY")
+        resolved_key = api_key or os.getenv("SERPAPI_API_KEY")
+        if not resolved_key:
+            resolved_key = get_settings().serpapi_api_key
+        self._api_key = resolved_key
         self._timeout_seconds = timeout_seconds
 
     def search(self, query: str, *, num_results: int = 10) -> list[SearchResult]:
