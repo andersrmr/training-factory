@@ -7,6 +7,7 @@ from training_factory.agents.brief import generate_brief
 from training_factory.agents.curriculum import generate_curriculum
 from training_factory.agents.lab import generate_lab
 from training_factory.agents.qa import generate_qa
+from training_factory.agents.research import generate_research
 from training_factory.agents.slides import generate_slides
 from training_factory.agents.templates import generate_templates
 from training_factory.state import TrainingState
@@ -18,6 +19,7 @@ SCHEMA_DIR = ROOT_DIR / "schemas"
 
 class GraphState(TypedDict):
     request: dict[str, Any]
+    research: dict[str, Any]
     brief: dict[str, Any]
     curriculum: dict[str, Any]
     lab: dict[str, Any]
@@ -28,8 +30,13 @@ class GraphState(TypedDict):
     revision_count: int
 
 
+def _research_node(state: GraphState) -> dict[str, Any]:
+    research = generate_research(state["request"])
+    return {"research": research}
+
+
 def _brief_node(state: GraphState) -> dict[str, Any]:
-    brief = generate_brief(state["request"])
+    brief = generate_brief(state["request"], state.get("research", {}))
     return {"brief": brief}
 
 
@@ -142,6 +149,7 @@ def _package_node(state: GraphState) -> dict[str, Any]:
 
 def build_graph():
     graph = StateGraph(GraphState)
+    graph.add_node("research", _research_node)
     graph.add_node("brief", _brief_node)
     graph.add_node("curriculum", _curriculum_node)
     graph.add_node("slides", _slides_node)
@@ -150,7 +158,8 @@ def build_graph():
     graph.add_node("qa", _qa_node)
     graph.add_node("package", _package_node)
 
-    graph.add_edge(START, "brief")
+    graph.add_edge(START, "research")
+    graph.add_edge("research", "brief")
     graph.add_edge("brief", "curriculum")
     graph.add_edge("curriculum", "slides")
     graph.add_edge("slides", "lab")

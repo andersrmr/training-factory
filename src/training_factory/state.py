@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 class TrainingState(BaseModel):
     request: dict[str, Any]
+    research: dict[str, Any] = Field(default_factory=dict)
     brief: dict[str, Any] = Field(default_factory=dict)
     curriculum: dict[str, Any] = Field(default_factory=dict)
     lab: dict[str, Any] = Field(default_factory=dict)

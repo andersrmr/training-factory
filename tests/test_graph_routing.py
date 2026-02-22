@@ -9,12 +9,20 @@ from training_factory.graph import build_graph
 from training_factory.state import TrainingState
 
 
-def _brief(_: dict) -> dict:
+def _brief(_: dict, __: dict) -> dict:
     return {
         "topic": "T",
         "audience": "A",
         "goals": ["g1"],
         "constraints": ["c1"],
+        "references_used": ["src_001"],
+        "key_guidelines": [
+            {
+                "guideline": "Use authoritative sources.",
+                "rationale": "Improves correctness.",
+                "sources": ["src_001"],
+            }
+        ],
     }
 
 
