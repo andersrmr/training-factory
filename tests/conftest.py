@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+from importlib import import_module
 from pathlib import Path
 import sys
+from typing import Generator
 
 import pytest
 
@@ -16,13 +18,16 @@ os.environ.pop("LANGSMITH_API_KEY", None)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from training_factory.settings import get_settings
+
+def _clear_settings_cache() -> None:
+    settings_module = import_module("training_factory.settings")
+    settings_module.get_settings.cache_clear()
 
 
 @pytest.fixture(autouse=True)
-def force_offline_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+def force_offline_mode(monkeypatch) -> Generator[None, None, None]:
     monkeypatch.setenv("TRAINING_FACTORY_OFFLINE", "1")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-should-not-be-used")
-    get_settings.cache_clear()
+    _clear_settings_cache()
     yield
-    get_settings.cache_clear()
+    _clear_settings_cache()
