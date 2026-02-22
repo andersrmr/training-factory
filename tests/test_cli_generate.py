@@ -34,6 +34,7 @@ def test_generate_writes_bundle_offline(tmp_path) -> None:
 
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     assert payload["request"]["topic"] == "Intro to Python"
+    assert payload["request"]["research"] == {"web": False, "search_provider": "fallback"}
     assert "curriculum" in payload
     assert "slides" in payload
     assert "qa" in payload

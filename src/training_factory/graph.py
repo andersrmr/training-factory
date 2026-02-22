@@ -166,8 +166,16 @@ def build_graph():
     return graph.compile()
 
 
-def run_pipeline(topic: str, audience: str) -> TrainingState:
+def run_pipeline(
+    topic: str,
+    audience: str,
+    *,
+    research: dict[str, Any] | None = None,
+) -> TrainingState:
     app = build_graph()
-    initial = TrainingState(request={"topic": topic, "audience": audience})
+    request: dict[str, Any] = {"topic": topic, "audience": audience}
+    if research is not None:
+        request["research"] = research
+    initial = TrainingState(request=request)
     result = app.invoke(cast(GraphState, initial.model_dump()))
     return TrainingState.model_validate(result)

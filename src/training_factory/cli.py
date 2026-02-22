@@ -1,6 +1,7 @@
 import json
 import os
 from contextlib import contextmanager
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,11 @@ from training_factory.utils.json_schema import validate_json
 
 app = typer.Typer(add_completion=False, help="Generate training assets from a topic.")
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "schemas" / "bundle.schema.json"
+
+
+class SearchProviderChoice(str, Enum):
+    serpapi = "serpapi"
+    fallback = "fallback"
 
 
 @app.callback()
@@ -55,11 +61,25 @@ def generate(
     audience: str = typer.Option("novice", "--audience", help="Target audience profile."),
     out: Path = typer.Option(Path("bundle.json"), "--out", help="Output bundle JSON path."),
     offline: bool = typer.Option(False, "--offline", help="Force offline mode for this run."),
+    web: bool = typer.Option(False, "--web", help="Enable web-capable research provider selection."),
+    search_provider: SearchProviderChoice = typer.Option(
+        SearchProviderChoice.fallback,
+        "--search-provider",
+        help="Research search provider to use.",
+    ),
 ) -> None:
-    request = {"topic": topic, "audience": audience}
+    request = {
+        "topic": topic,
+        "audience": audience,
+        "research": {"web": web, "search_provider": search_provider.value},
+    }
 
     with _offline_override(offline):
-        state = run_pipeline(topic=request["topic"], audience=request["audience"])
+        state = run_pipeline(
+            topic=request["topic"],
+            audience=request["audience"],
+            research=request["research"],
+        )
 
     bundle = _extract_bundle(state)
     validate_json(bundle, SCHEMA_PATH)
