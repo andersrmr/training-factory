@@ -212,7 +212,9 @@ def main() -> None:
     validate_result: dict[str, Any] | None = None
 
     with st.sidebar:
-        st.header("Run Inputs (preview)")
+        st.caption("Configure generation inputs, run the pipeline, and inspect loaded bundles.")
+
+        st.header("Generation")
         topic = st.text_input("topic", value="Power BI fundamentals")
 
         audience_options = ["novice", "intermediate", "advanced", "Custom..."]
@@ -227,6 +229,7 @@ def main() -> None:
             ["M1 offline", "M2 web+fallback", "M3 web+serpapi"],
             index=0,
         )
+        st.caption("Mode mapping: M1: offline | M2: web + fallback | M3: web + serpapi")
         mode = mode_label.split()[0]
         if mode == "M1":
             mode_flags = "--offline"
@@ -247,30 +250,27 @@ def main() -> None:
         else:
             product_flag = f"--product {product}"
 
-        st.caption("Mode -> CLI Mapping:")
-        st.caption("M1 = --offline")
-        st.caption("M2 = --web --search-provider fallback")
-        st.caption("M3 = --web --search-provider serpapi")
-
-        st.header("Execution (Step 5)")
+        st.header("Run Controls")
         out_dir = st.text_input("out_dir", value=str(state.get("out_dir") or "out/gui"))
-        run_cwd = st.text_input("run_cwd", value=str(state.get("run_cwd") or ""))
-        timeout_s = int(
-            st.number_input(
-                "timeout_s",
-                min_value=1,
-                value=int(state.get("timeout_s") or 600),
-                step=1,
-            )
-        )
-        command_template = st.text_area(
-            "Command Template",
-            value=str(state.get("run_command_template") or ""),
-            height=130,
-        )
-        st.caption("Tokens available: {topic}, {audience}, {bundle_path}, {mode_flags}, {product_flag}")
-        st.caption("Tip: edit the template to match your repo's actual CLI entrypoint.")
         st.caption("Bundles are written under out_dir/<MODE>/bundle.json to avoid overwriting.")
+
+        with st.expander("Advanced settings", expanded=False):
+            run_cwd = st.text_input("run_cwd", value=str(state.get("run_cwd") or ""))
+            timeout_s = int(
+                st.number_input(
+                    "timeout_s",
+                    min_value=1,
+                    value=int(state.get("timeout_s") or 600),
+                    step=1,
+                )
+            )
+            command_template = st.text_area(
+                "Command Template",
+                value=str(state.get("run_command_template") or ""),
+                height=130,
+            )
+            st.caption("Tokens available: {topic}, {audience}, {bundle_path}, {mode_flags}, {product_flag}")
+            st.caption("Tip: edit the template to match your repo's actual CLI entrypoint.")
 
         st.session_state["out_dir"] = out_dir
         st.session_state["run_cwd"] = run_cwd
@@ -379,6 +379,10 @@ def main() -> None:
         loaded = st.session_state.get("bundle") is not None
         st.write(f"loaded bundle: {'yes' if loaded else 'no'}")
         st.write(f"last loaded: {_format_ts(st.session_state.get('last_loaded_at'))}")
+        last_run_result = st.session_state.get("last_run_result")
+        if isinstance(last_run_result, dict):
+            run_ok = bool(last_run_result.get("ok"))
+            st.write(f"last run: {'ok' if run_ok else 'fail'}")
 
     bundle = st.session_state.get("bundle")
     last_run_result = st.session_state.get("last_run_result")
@@ -400,7 +404,7 @@ def main() -> None:
             st.markdown(
                 """
 ### Placeholder
-- Use **Run pipeline** in Step 5, then auto-load the produced bundle.
+- Use **Run pipeline** to generate and auto-load the produced bundle.
 - Or use **Load last bundle** / **Upload bundle.json**.
                 """
             )
