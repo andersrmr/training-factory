@@ -6,7 +6,7 @@
   "properties": {
     "query_plan": {
       "type": "object",
-      "required": ["queries", "intent_keywords", "preferred_domains"],
+      "required": ["queries", "intent_keywords", "preferred_domains", "product"],
       "properties": {
         "queries": {
           "type": "array",
@@ -22,6 +22,16 @@
         "preferred_domains": {
           "type": "array",
           "items": { "type": "string" }
+        },
+        "product": {
+          "type": "string",
+          "enum": [
+            "power_bi",
+            "power_apps",
+            "power_platform",
+            "enterprise_chatgpt",
+            "generic"
+          ]
         }
       },
       "additionalProperties": false

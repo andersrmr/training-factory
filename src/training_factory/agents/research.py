@@ -55,19 +55,54 @@ def _is_power_platform_topic(topic: str) -> bool:
     )
 
 
+def _detect_product(topic: str) -> str:
+    topic_lower = topic.lower()
+    if "power bi" in topic_lower:
+        return "power_bi"
+    if "power apps" in topic_lower:
+        return "power_apps"
+    if (
+        "power platform" in topic_lower
+        or "dataverse" in topic_lower
+        or "power automate" in topic_lower
+    ):
+        return "power_platform"
+    if "enterprise chatgpt" in topic_lower or "chatgpt" in topic_lower:
+        return "enterprise_chatgpt"
+    return "generic"
+
+
 def _build_query_plan(topic: str) -> dict[str, Any]:
-    queries = [
+    product = _detect_product(topic)
+    base_queries = [
         f"{topic} best practices",
         f"{topic} governance operating model",
         f"{topic} lifecycle ALM",
         f"{topic} security risk controls",
-        f"{topic} implementation guide",
     ]
+    anchor_queries: list[str] = []
+    if product == "power_bi":
+        anchor_queries = [
+            "site:learn.microsoft.com/power-bi power bi guidance best practices",
+            "site:learn.microsoft.com/fabric powerbi admin security governance",
+        ]
+    elif product in {"power_apps", "power_platform"}:
+        anchor_queries = [
+            "site:learn.microsoft.com/power-platform alm governance best practices",
+            "site:learn.microsoft.com/power-apps governance environment strategy",
+        ]
+    elif product == "enterprise_chatgpt":
+        anchor_queries = [
+            "enterprise chatgpt governance risk controls best practices",
+            "site:nist.gov generative ai risk management",
+        ]
+    queries = anchor_queries + base_queries
     preferred_domains = ["learn.microsoft.com"] if _is_power_platform_topic(topic) else []
     return {
         "queries": queries,
         "intent_keywords": list(_INTENT_KEYWORDS),
         "preferred_domains": preferred_domains,
+        "product": product,
     }
 
 
@@ -131,6 +166,7 @@ def _score_result(
     topic: str,
     intent_keywords: list[str],
     preferred_domains: list[str],
+    product: str,
     result: SearchResult,
     domain: str,
 ) -> tuple[str, float]:
@@ -139,6 +175,27 @@ def _score_result(
     score += _keyword_overlap_score(topic, intent_keywords, result.title, result.snippet)
     if any(domain == d or domain.endswith(f".{d}") for d in preferred_domains):
         score += 1.0
+    url_lower = result.url.lower()
+    topic_lower = topic.lower()
+    topic_has_alm_or_lifecycle = "alm" in topic_lower or "lifecycle" in topic_lower
+    if product == "power_bi":
+        if "/power-bi/" in url_lower or "/fabric/" in url_lower:
+            score += 0.6
+        if ("/power-platform/" in url_lower or "/power-apps/" in url_lower) and not topic_has_alm_or_lifecycle:
+            score -= 0.4
+    elif product == "power_apps":
+        if "/power-apps/" in url_lower:
+            score += 0.6
+        if "/power-bi/" in url_lower:
+            score -= 0.2
+    elif product == "power_platform":
+        if "/power-platform/" in url_lower:
+            score += 0.6
+        if "/power-bi/" in url_lower:
+            score -= 0.2
+    elif product == "enterprise_chatgpt":
+        if domain in {"nist.gov", "owasp.org", "learn.microsoft.com", "cloud.google.com", "aws.amazon.com"}:
+            score += 0.6
     return tier, round(score, 3)
 
 
@@ -185,6 +242,7 @@ def generate_research(request: dict[str, Any]) -> dict[str, Any]:
                 topic=topic,
                 intent_keywords=query_plan["intent_keywords"],
                 preferred_domains=query_plan["preferred_domains"],
+                product=str(query_plan["product"]),
                 result=item,
                 domain=domain,
             )
