@@ -34,6 +34,7 @@ htmlcov/
 build/
 dist/
 out/
+artifacts/
 *.egg-info/
 .eggs/
 wheels/
