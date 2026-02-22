@@ -50,6 +50,7 @@ def _research_qa_node(state: GraphState) -> dict[str, Any]:
 
 def _research_retry_node(state: GraphState) -> dict[str, Any]:
     revision_count = int(state.get("research_revision_count", 0))
+    # Retry bookkeeping only: keep research/research_qa payloads unchanged here.
     return {"research_revision_count": revision_count + 1}
 
 

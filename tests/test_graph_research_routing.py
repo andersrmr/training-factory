@@ -155,10 +155,88 @@ def test_research_qa_fail_retries_once_then_proceeds(monkeypatch) -> None:
     monkeypatch.setattr(graph_module, "generate_lab", _lab)
     monkeypatch.setattr(graph_module, "generate_templates", _templates)
     monkeypatch.setattr(graph_module, "generate_qa", lambda *_args: {"status": "pass", "checks": []})
+    monkeypatch.setattr(graph_module, "validate_json", lambda *_args, **_kwargs: None)
 
     graph = build_graph()
     result = graph.invoke(TrainingState(request={"topic": "X", "audience": "Y"}).model_dump())
 
     assert calls["research"] == 2
     assert result["research_revision_count"] == 1
+    assert result["packaging"]["research_qa"]["status"] == "pass"
+
+
+def test_research_retry_does_not_overwrite_research_payload(monkeypatch) -> None:
+    import training_factory.graph as graph_module
+
+    calls = {"research": 0}
+
+    first_research = {
+        "query_plan": {"queries": ["q1"], "intent_keywords": ["governance"], "preferred_domains": []},
+        "sources": [
+            {
+                "id": "src_001",
+                "title": "first source",
+                "url": "https://example.com/first",
+                "domain": "example.com",
+                "publisher": "example.com",
+                "doc_type": "",
+                "authority_tier": "D",
+                "score": 0.1,
+                "snippets": [{"heading": "search_snippet", "text": "first snippet", "loc": "search"}],
+            }
+        ],
+        "context_pack": "first pack",
+        "sentinel": "first",
+    }
+    second_research = {
+        "query_plan": {"queries": ["q2"], "intent_keywords": ["governance"], "preferred_domains": []},
+        "sources": [
+            {
+                "id": "src_001",
+                "title": "second source",
+                "url": "https://example.com/second",
+                "domain": "example.com",
+                "publisher": "example.com",
+                "doc_type": "",
+                "authority_tier": "A",
+                "score": 4.9,
+                "snippets": [{"heading": "search_snippet", "text": "second snippet", "loc": "search"}],
+            }
+        ],
+        "context_pack": "second pack",
+        "sentinel": "second",
+    }
+
+    def research_fn(_: dict) -> dict:
+        calls["research"] += 1
+        return first_research if calls["research"] == 1 else second_research
+
+    def research_qa_fn(research: dict, _request: dict) -> dict:
+        return {
+            "status": "fail" if research.get("sentinel") == "first" else "pass",
+            "checks": [{"prompt": "sentinel check", "answer": "No" if research.get("sentinel") == "first" else "Yes"}],
+            "metrics": {
+                "tier_counts": {"A": 1 if research.get("sentinel") == "second" else 0, "B": 0, "C": 0, "D": 0},
+                "domain_counts": {"example.com": 1},
+                "keyword_coverage_ratio": 1.0 if research.get("sentinel") == "second" else 0.0,
+            },
+        }
+
+    monkeypatch.setattr(graph_module, "generate_research", research_fn)
+    monkeypatch.setattr(graph_module, "generate_research_qa", research_qa_fn)
+    monkeypatch.setattr(graph_module, "generate_brief", _brief)
+    monkeypatch.setattr(graph_module, "generate_curriculum", _curriculum)
+    monkeypatch.setattr(graph_module, "generate_slides", _slides)
+    monkeypatch.setattr(graph_module, "generate_lab", _lab)
+    monkeypatch.setattr(graph_module, "generate_templates", _templates)
+    monkeypatch.setattr(graph_module, "generate_qa", lambda *_args: {"status": "pass", "checks": []})
+    monkeypatch.setattr(graph_module, "validate_json", lambda *_args, **_kwargs: None)
+
+    graph = build_graph()
+    result = graph.invoke(TrainingState(request={"topic": "X", "audience": "Y"}).model_dump())
+
+    assert result["research_revision_count"] == 1
+    assert result["research"]["sentinel"] == "second"
+    assert result["research_qa"]["status"] == "pass"
+    assert result["packaging"]["research"]["sentinel"] == "second"
     assert result["packaging"]["research_qa"]["status"] == "pass"
