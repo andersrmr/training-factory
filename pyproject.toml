@@ -39,3 +39,8 @@ packages = ["src/training_factory"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "streamlit>=1.54.0",
+]

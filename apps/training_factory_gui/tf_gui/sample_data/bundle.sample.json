@@ -1,0 +1,90 @@
+{
+  "request": {
+    "topic": "Power BI fundamentals",
+    "audience": "novice",
+    "research": {
+      "web": true,
+      "search_provider": "fallback"
+    }
+  },
+  "research": {
+    "query_plan": {
+      "product": "power_bi",
+      "queries": [
+        "site:learn.microsoft.com/power-bi power bi guidance best practices"
+      ],
+      "intent_keywords": [
+        "governance",
+        "best practices"
+      ],
+      "preferred_domains": [
+        "learn.microsoft.com"
+      ]
+    },
+    "sources": [
+      {
+        "id": "src_001",
+        "title": "Power BI governance guidance",
+        "url": "https://learn.microsoft.com/power-bi/guidance/",
+        "domain": "learn.microsoft.com",
+        "authority_tier": "A",
+        "score": 6.2,
+        "snippets": [
+          {
+            "heading": "Governance",
+            "text": "Use environment and tenant governance controls.",
+            "loc": "p[1]"
+          }
+        ]
+      }
+    ]
+  },
+  "research_qa": {
+    "status": "pass",
+    "metrics": {
+      "tier_counts": {
+        "A": 1,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "domain_counts": {
+        "learn.microsoft.com": 1
+      },
+      "keyword_coverage_ratio": 1.0
+    }
+  },
+  "brief": {
+    "references_used": [
+      "src_001"
+    ],
+    "key_guidelines": [
+      {
+        "guideline": "Prioritize governance controls.",
+        "sources": [
+          "src_001"
+        ]
+      }
+    ]
+  },
+  "curriculum": {
+    "modules": [
+      {
+        "title": "Power BI Governance Basics",
+        "duration_minutes": 45,
+        "sources": [
+          "src_001"
+        ]
+      }
+    ]
+  },
+  "qa": {
+    "status": "pass",
+    "checks": [
+      {
+        "prompt": "Does curriculum include references_used and are they valid research source IDs?",
+        "answer": "Yes"
+      }
+    ]
+  }
+}
