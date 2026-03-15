@@ -277,7 +277,7 @@ Tradeoff: Explainability and reproducibility over fuzzy semantic recall.
 
 ### Status
 
-Phase 2: Research layer maturity complete
+Phase 2: Research layer maturity complete  
 Phase 3: GUI and execution framework complete
 
 The system is architecturally stable and reproducible.
