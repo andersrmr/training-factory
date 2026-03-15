@@ -91,7 +91,9 @@ Retry rules are bounded and deterministic:
 flowchart TD
     START([START]) --> research[research]
     research --> research_qa[research_qa]
-    research_qa --> brief[brief]
+    research_qa -->|fail and research_revision_count < 1| research_retry[research_retry]
+    research_retry --> research
+    research_qa -->|pass or retry limit reached| brief[brief]
     brief --> curriculum[curriculum]
     curriculum --> slides[slides]
     slides --> lab[lab]
