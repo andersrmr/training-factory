@@ -1,3 +1,5 @@
 {
-  "python.analysis.extraPaths": ["./src"]
+  "python.analysis.extraPaths": ["./src"],
+  "python.defaultInterpreterPath": ".venv/bin/python",
+  "python.terminal.activateEnvironment": true
 }
