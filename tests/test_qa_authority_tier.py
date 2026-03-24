@@ -118,3 +118,30 @@ def test_qa_normalization_forces_fail_when_any_check_is_no(monkeypatch) -> None:
     qa = qa_module.generate_qa(_slides_stub(), _lab_stub(), _templates_stub(), curriculum, _research_stub())
 
     assert qa["status"] == "fail"
+
+
+def test_qa_normalization_converts_pass_fail_answers_to_yes_no(monkeypatch) -> None:
+    import training_factory.agents.qa as qa_module
+
+    def fake_generate_structured_output(*, normalize, **_kwargs):
+        return normalize(
+            {
+                "status": "pass",
+                "checks": [
+                    {"prompt": "check 1", "answer": "pass"},
+                    {"prompt": "check 2", "answer": "passed"},
+                ],
+            }
+        )
+
+    monkeypatch.setattr(qa_module, "generate_structured_output", fake_generate_structured_output)
+
+    curriculum = {
+        "topic": "Power BI basics",
+        "references_used": ["src_002", "src_004"],
+        "modules": [{"title": "M1", "duration_minutes": 10, "sources": ["src_002"]}],
+    }
+    qa = qa_module.generate_qa(_slides_stub(), _lab_stub(), _templates_stub(), curriculum, _research_stub())
+
+    assert qa["status"] == "pass"
+    assert [item["answer"] for item in qa["checks"]] == ["Yes", "Yes"]

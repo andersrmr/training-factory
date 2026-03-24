@@ -86,6 +86,15 @@ def _is_plausible_markdown(text: str) -> bool:
     return len(stripped) >= 20 and ("\n" in stripped or stripped.startswith("#"))
 
 
+def _normalize_check_answer(value: Any) -> str:
+    text = str(value).strip().lower()
+    if text in {"yes", "pass", "passed", "true"}:
+        return "Yes"
+    if text in {"no", "fail", "failed", "false"}:
+        return "No"
+    return ""
+
+
 def _research_ids(research: dict[str, Any]) -> set[str]:
     ids: set[str] = set()
     sources = research.get("sources", [])
@@ -292,7 +301,16 @@ def generate_qa(
         if "qa" in payload and isinstance(payload["qa"], dict):
             payload = payload["qa"]
         checks = payload.get("checks", fallback["checks"])
-        normalized_checks = checks if isinstance(checks, list) else fallback["checks"]
+        raw_checks = checks if isinstance(checks, list) else fallback["checks"]
+        normalized_checks: list[dict[str, str]] = []
+        for item in raw_checks:
+            if not isinstance(item, dict):
+                continue
+            prompt = str(item.get("prompt", "")).strip()
+            answer = _normalize_check_answer(item.get("answer", ""))
+            normalized_checks.append({"prompt": prompt, "answer": answer})
+        if not normalized_checks:
+            normalized_checks = fallback["checks"]
         status = "pass"
         for item in normalized_checks:
             if not isinstance(item, dict) or item.get("answer") != "Yes":
