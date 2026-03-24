@@ -68,6 +68,12 @@ def generate(
         min=0,
         help="Maximum number of research_qa-triggered research retries.",
     ),
+    qa_max_retries: int = typer.Option(
+        1,
+        "--qa-max-retries",
+        min=0,
+        help="Maximum number of qa-triggered downstream retries.",
+    ),
     search_provider: SearchProviderChoice = typer.Option(
         SearchProviderChoice.fallback,
         "--search-provider",
@@ -82,6 +88,9 @@ def generate(
             "search_provider": search_provider.value,
             "max_retries": research_max_retries,
         },
+        "qa": {
+            "max_retries": qa_max_retries,
+        },
     }
 
     with _offline_override(offline):
@@ -89,6 +98,7 @@ def generate(
             topic=request["topic"],
             audience=request["audience"],
             research=request["research"],
+            qa=request["qa"],
         )
 
     bundle = _extract_bundle(state)

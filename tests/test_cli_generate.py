@@ -39,6 +39,7 @@ def test_generate_writes_bundle_offline(tmp_path) -> None:
         "search_provider": "fallback",
         "max_retries": 1,
     }
+    assert payload["request"]["qa"]["max_retries"] == 1
     assert payload["execution"]["research_revision_count"] == 0
     assert isinstance(payload["execution"]["qa_revision_count"], int)
     assert payload["execution"]["qa_revision_count"] >= 0
@@ -74,6 +75,33 @@ def test_generate_accepts_research_max_retries(tmp_path) -> None:
 
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     assert payload["request"]["research"]["max_retries"] == 3
+    assert payload["request"]["qa"]["max_retries"] == 1
     assert payload["execution"]["research_revision_count"] == 0
     assert isinstance(payload["execution"]["qa_revision_count"], int)
     assert payload["execution"]["qa_revision_count"] >= 0
+
+
+def test_generate_accepts_qa_max_retries(tmp_path) -> None:
+    runner = CliRunner()
+    out_path = tmp_path / "bundle.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "generate",
+            "--topic",
+            "Intro to Python",
+            "--audience",
+            "novice",
+            "--out",
+            str(out_path),
+            "--offline",
+            "--qa-max-retries",
+            "2",
+        ],
+    )
+
+    assert result.exit_code == 0
+
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["request"]["qa"]["max_retries"] == 2

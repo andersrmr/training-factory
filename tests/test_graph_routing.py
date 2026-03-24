@@ -143,3 +143,37 @@ def test_qa_fail_with_revision_limit_packages_without_retry(monkeypatch) -> None
     assert calls["slides"] == 1
     assert result["packaging"]["qa"]["status"] == "fail"
     assert result["revision_count"] == 1
+
+
+def test_qa_fail_honors_zero_retry_limit(monkeypatch) -> None:
+    import training_factory.graph as graph_module
+
+    calls = {"slides": 0}
+
+    def slides_fn(curriculum: dict, *, retry_strategy: dict | None = None) -> dict:
+        _ = retry_strategy
+        calls["slides"] += 1
+        return _slides(curriculum)
+
+    monkeypatch.setattr(graph_module, "generate_brief", _brief)
+    monkeypatch.setattr(graph_module, "generate_curriculum", _curriculum)
+    monkeypatch.setattr(graph_module, "generate_slides", slides_fn)
+    monkeypatch.setattr(
+        graph_module,
+        "generate_qa",
+        lambda _slides, _lab, _templates, _curriculum, _research: {
+            "status": "fail",
+            "checks": [{"prompt": "Do templates align with slides and lab?", "answer": "No"}],
+        },
+    )
+
+    graph = build_graph()
+    result = graph.invoke(
+        TrainingState(
+            request={"topic": "X", "audience": "Y", "qa": {"max_retries": 0}}
+        ).model_dump()
+    )
+
+    assert calls["slides"] == 1
+    assert result["packaging"]["qa"]["status"] == "fail"
+    assert result["revision_count"] == 0

@@ -58,6 +58,16 @@ def _research_max_retries(state: GraphState) -> int:
     return _coerce_non_negative_int(research_cfg.get("max_retries"), default=1)
 
 
+def _qa_max_retries(state: GraphState) -> int:
+    request = state.get("request", {})
+    if not isinstance(request, dict):
+        return 1
+    qa_cfg = request.get("qa", {})
+    if not isinstance(qa_cfg, dict):
+        return 1
+    return _coerce_non_negative_int(qa_cfg.get("max_retries"), default=1)
+
+
 def _research_node(state: GraphState) -> dict[str, Any]:
     research = generate_research(state["request"])
     return {"research": research}
@@ -240,7 +250,7 @@ def _qa_node(state: GraphState) -> dict[str, Any]:
 def _route_after_qa(state: GraphState) -> str:
     qa_status = state.get("qa", {}).get("status")
     revision_count = int(state.get("revision_count", 0))
-    if qa_status == "fail" and revision_count < 1:
+    if qa_status == "fail" and revision_count < _qa_max_retries(state):
         return "qa_retry"
     return "package"
 
@@ -372,11 +382,14 @@ def run_pipeline(
     audience: str,
     *,
     research: dict[str, Any] | None = None,
+    qa: dict[str, Any] | None = None,
 ) -> TrainingState:
     app = build_graph()
     request: dict[str, Any] = {"topic": topic, "audience": audience}
     if research is not None:
         request["research"] = research
+    if qa is not None:
+        request["qa"] = qa
     initial = TrainingState(request=request)
     result = app.invoke(cast(GraphState, initial.model_dump()))
     return TrainingState.model_validate(result)

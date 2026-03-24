@@ -181,6 +181,7 @@ def run_pipeline_in_process(
     web: bool,
     search_provider: str,
     research_max_retries: int,
+    qa_max_retries: int,
     offline: bool,
     log_dir: str,
 ) -> tuple[RunResult, dict[str, Any] | None]:
@@ -195,6 +196,7 @@ def run_pipeline_in_process(
         f"web={web}",
         f"search_provider={search_provider}",
         f"research_max_retries={research_max_retries}",
+        f"qa_max_retries={qa_max_retries}",
         f"offline={offline}",
     ]
 
@@ -208,8 +210,16 @@ def run_pipeline_in_process(
             "search_provider": search_provider,
             "max_retries": research_max_retries,
         }
+        request_qa = {
+            "max_retries": qa_max_retries,
+        }
         with _offline_override(offline):
-            state = run_pipeline(topic=topic, audience=audience, research=request_research)
+            state = run_pipeline(
+                topic=topic,
+                audience=audience,
+                research=request_research,
+                qa=request_qa,
+            )
         bundle = _extract_bundle(state)
         validate_json(bundle, SCHEMA_PATH)
         module_count = len(bundle.get("curriculum", {}).get("modules", [])) if isinstance(bundle, dict) else 0

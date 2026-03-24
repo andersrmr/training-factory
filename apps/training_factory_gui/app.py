@@ -339,6 +339,7 @@ def main() -> None:
             run_cwd = st.text_input("run_cwd", value=str(state.get("run_cwd") or ""))
             timeout_default = _coerce_timeout_seconds(state.get("timeout_s"))
             retry_default = _coerce_retry_count(state.get("research_max_retries"))
+            qa_retry_default = _coerce_retry_count(state.get("qa_max_retries"))
             timeout_s = int(
                 st.number_input(
                     "timeout_s",
@@ -356,6 +357,15 @@ def main() -> None:
                     help="Maximum number of times to rerun research when research_qa fails.",
                 )
             )
+            qa_max_retries = int(
+                st.number_input(
+                    "qa_max_retries",
+                    min_value=0,
+                    value=qa_retry_default,
+                    step=1,
+                    help="Maximum number of times to rerun slides/lab/templates when qa fails.",
+                )
+            )
             if execution_mode_value == "cli":
                 command_template = st.text_area(
                     "Command Template",
@@ -364,7 +374,7 @@ def main() -> None:
                 )
                 st.caption(
                     "Tokens available: {topic}, {audience}, {bundle_path}, {research_max_retries}, "
-                    "{mode_flags}, {product_flag}"
+                    "{qa_max_retries}, {mode_flags}, {product_flag}"
                 )
                 st.caption("Tip: edit the template to match this repo's actual CLI entrypoint.")
             else:
@@ -376,6 +386,7 @@ def main() -> None:
         st.session_state["run_cwd"] = run_cwd
         st.session_state["timeout_s"] = timeout_s
         st.session_state["research_max_retries"] = research_max_retries
+        st.session_state["qa_max_retries"] = qa_max_retries
         st.session_state["run_command_template"] = command_template
         st.session_state["mode_flags"] = mode_flags
         st.session_state["product_flag"] = product_flag
@@ -388,6 +399,7 @@ def main() -> None:
             "audience": audience,
             "bundle_path": bundle_path,
             "research_max_retries": str(research_max_retries),
+            "qa_max_retries": str(qa_max_retries),
             "mode_flags": mode_flags,
             "product_flag": product_flag,
         }
@@ -429,6 +441,7 @@ def main() -> None:
                     web=web,
                     search_provider=search_provider,
                     research_max_retries=research_max_retries,
+                    qa_max_retries=qa_max_retries,
                     offline=offline,
                     log_dir=f"{out_dir}/logs",
                 )

@@ -8,7 +8,8 @@ _DEFAULT_SAVE_BUNDLE_PATH = "out/gui/manual/bundle.json"
 _DEFAULT_OUT_DIR = "out/gui"
 _DEFAULT_RUN_TEMPLATE = (
     'python -m training_factory.cli generate --topic "{topic}" --audience {audience} '
-    '--out "{bundle_path}" --research-max-retries {research_max_retries} {mode_flags} {product_flag}'
+    '--out "{bundle_path}" --research-max-retries {research_max_retries} '
+    '--qa-max-retries {qa_max_retries} {mode_flags} {product_flag}'
 )
 
 
@@ -35,6 +36,8 @@ def init_state_defaults() -> None:
         st.session_state["timeout_s"] = 600
     if "research_max_retries" not in st.session_state:
         st.session_state["research_max_retries"] = 1
+    if "qa_max_retries" not in st.session_state:
+        st.session_state["qa_max_retries"] = 1
     if "mode_flags" not in st.session_state:
         st.session_state["mode_flags"] = ""
     if "product_flag" not in st.session_state:
@@ -55,6 +58,7 @@ def get_state() -> dict[str, object]:
         "last_run_result": st.session_state.get("last_run_result"),
         "timeout_s": st.session_state.get("timeout_s"),
         "research_max_retries": st.session_state.get("research_max_retries"),
+        "qa_max_retries": st.session_state.get("qa_max_retries"),
         "mode_flags": st.session_state.get("mode_flags"),
         "product_flag": st.session_state.get("product_flag"),
     }
