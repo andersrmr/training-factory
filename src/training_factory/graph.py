@@ -33,6 +33,31 @@ class GraphState(TypedDict):
     revision_count: int
 
 
+def _coerce_non_negative_int(value: Any, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return max(0, value)
+    if isinstance(value, float):
+        return max(0, int(value))
+    if isinstance(value, str):
+        try:
+            return max(0, int(value.strip()))
+        except ValueError:
+            return default
+    return default
+
+
+def _research_max_retries(state: GraphState) -> int:
+    request = state.get("request", {})
+    if not isinstance(request, dict):
+        return 1
+    research_cfg = request.get("research", {})
+    if not isinstance(research_cfg, dict):
+        return 1
+    return _coerce_non_negative_int(research_cfg.get("max_retries"), default=1)
+
+
 def _research_node(state: GraphState) -> dict[str, Any]:
     research = generate_research(state["request"])
     return {"research": research}
@@ -100,7 +125,7 @@ def _route_after_qa(state: GraphState) -> str:
 def _route_after_research_qa(state: GraphState) -> str:
     research_qa_status = state.get("research_qa", {}).get("status")
     revision_count = int(state.get("research_revision_count", 0))
-    if research_qa_status == "fail" and revision_count < 1:
+    if research_qa_status == "fail" and revision_count < _research_max_retries(state):
         return "research_retry"
     return "brief"
 

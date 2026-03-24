@@ -34,10 +34,40 @@ def test_generate_writes_bundle_offline(tmp_path) -> None:
 
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     assert payload["request"]["topic"] == "Intro to Python"
-    assert payload["request"]["research"] == {"web": False, "search_provider": "fallback"}
+    assert payload["request"]["research"] == {
+        "web": False,
+        "search_provider": "fallback",
+        "max_retries": 1,
+    }
     assert "curriculum" in payload
     assert "slides" in payload
     assert "qa" in payload
 
     assert f"Wrote bundle to {out_path}" in result.stdout
     assert "Topic: Intro to Python" in result.stdout
+
+
+def test_generate_accepts_research_max_retries(tmp_path) -> None:
+    runner = CliRunner()
+    out_path = tmp_path / "bundle.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "generate",
+            "--topic",
+            "Intro to Python",
+            "--audience",
+            "novice",
+            "--out",
+            str(out_path),
+            "--offline",
+            "--research-max-retries",
+            "3",
+        ],
+    )
+
+    assert result.exit_code == 0
+
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["request"]["research"]["max_retries"] == 3

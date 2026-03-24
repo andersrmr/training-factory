@@ -255,3 +255,173 @@ def test_research_retry_does_not_overwrite_research_payload(monkeypatch) -> None
     assert result["research_qa"]["status"] == "pass"
     assert result["packaging"]["research"]["sentinel"] == "second"
     assert result["packaging"]["research_qa"]["status"] == "pass"
+
+
+def test_research_qa_fail_honors_zero_retry_limit(monkeypatch) -> None:
+    import training_factory.graph as graph_module
+
+    calls = {"research": 0}
+
+    def research_fn(_: dict) -> dict:
+        calls["research"] += 1
+        return {
+            "query_plan": {"queries": ["x"], "intent_keywords": ["governance"], "preferred_domains": []},
+            "sources": [
+                {
+                    "id": "src_001",
+                    "title": "misc notes",
+                    "url": "https://example.com/a",
+                    "domain": "example.com",
+                    "publisher": "example.com",
+                    "doc_type": "",
+                    "authority_tier": "D",
+                    "score": 0.1,
+                    "snippets": [{"heading": "search_snippet", "text": "random text", "loc": "search"}],
+                }
+            ],
+            "context_pack": "x",
+        }
+
+    monkeypatch.setattr(graph_module, "generate_research", research_fn)
+    monkeypatch.setattr(graph_module, "generate_brief", _brief)
+    monkeypatch.setattr(graph_module, "generate_curriculum", _curriculum)
+    monkeypatch.setattr(graph_module, "generate_slides", _slides)
+    monkeypatch.setattr(graph_module, "generate_lab", _lab)
+    monkeypatch.setattr(graph_module, "generate_templates", _templates)
+    monkeypatch.setattr(
+        graph_module,
+        "generate_qa",
+        lambda _slides, _lab, _templates, _curriculum, _research: {"status": "pass", "checks": []},
+    )
+    monkeypatch.setattr(graph_module, "validate_json", lambda *_args, **_kwargs: None)
+
+    graph = build_graph()
+    result = graph.invoke(
+        TrainingState(
+            request={
+                "topic": "X",
+                "audience": "Y",
+                "research": {"max_retries": 0},
+            }
+        ).model_dump()
+    )
+
+    assert calls["research"] == 1
+    assert result["research_revision_count"] == 0
+    assert result["packaging"]["research_qa"]["status"] == "fail"
+
+
+def test_research_qa_fail_honors_custom_retry_limit(monkeypatch) -> None:
+    import training_factory.graph as graph_module
+
+    calls = {"research": 0}
+
+    def research_fn(_: dict) -> dict:
+        calls["research"] += 1
+        if calls["research"] < 3:
+            return {
+                "query_plan": {"queries": ["x"], "intent_keywords": ["governance"], "preferred_domains": []},
+                "sources": [
+                    {
+                        "id": "src_001",
+                        "title": "misc notes",
+                        "url": "https://example.com/a",
+                        "domain": "example.com",
+                        "publisher": "example.com",
+                        "doc_type": "",
+                        "authority_tier": "D",
+                        "score": 0.1,
+                        "snippets": [{"heading": "search_snippet", "text": "random text", "loc": "search"}],
+                    }
+                ],
+                "context_pack": "x",
+            }
+        return {
+            "query_plan": {
+                "queries": ["Power BI basics governance"],
+                "intent_keywords": ["power", "governance"],
+                "preferred_domains": ["learn.microsoft.com"],
+            },
+            "sources": [
+                {
+                    "id": "src_001",
+                    "title": "Power BI governance guidance",
+                    "url": "https://learn.microsoft.com/power-bi/guidance/",
+                    "domain": "learn.microsoft.com",
+                    "publisher": "learn.microsoft.com",
+                    "doc_type": "guide",
+                    "authority_tier": "A",
+                    "score": 5.0,
+                    "snippets": [
+                        {
+                            "heading": "search_snippet",
+                            "text": "Power BI governance and security best practices.",
+                            "loc": "search",
+                        }
+                    ],
+                },
+                {
+                    "id": "src_002",
+                    "title": "NIST risk management",
+                    "url": "https://www.nist.gov/cyberframework",
+                    "domain": "nist.gov",
+                    "publisher": "nist.gov",
+                    "doc_type": "",
+                    "authority_tier": "A",
+                    "score": 4.6,
+                    "snippets": [
+                        {
+                            "heading": "search_snippet",
+                            "text": "Risk management guidance applicable to governance.",
+                            "loc": "search",
+                        }
+                    ],
+                },
+                {
+                    "id": "src_003",
+                    "title": "Power BI lifecycle and ALM",
+                    "url": "https://learn.microsoft.com/power-bi/enterprise/powerbi-implementation-planning-alm",
+                    "domain": "learn.microsoft.com",
+                    "publisher": "learn.microsoft.com",
+                    "doc_type": "guide",
+                    "authority_tier": "A",
+                    "score": 4.8,
+                    "snippets": [
+                        {
+                            "heading": "search_snippet",
+                            "text": "Lifecycle and ALM for Power BI deployments.",
+                            "loc": "search",
+                        }
+                    ],
+                },
+            ],
+            "context_pack": "topic + sources",
+        }
+
+    monkeypatch.setattr(graph_module, "generate_research", research_fn)
+    monkeypatch.setattr(graph_module, "generate_brief", _brief)
+    monkeypatch.setattr(graph_module, "generate_curriculum", _curriculum)
+    monkeypatch.setattr(graph_module, "generate_slides", _slides)
+    monkeypatch.setattr(graph_module, "generate_lab", _lab)
+    monkeypatch.setattr(graph_module, "generate_templates", _templates)
+    monkeypatch.setattr(
+        graph_module,
+        "generate_qa",
+        lambda _slides, _lab, _templates, _curriculum, _research: {"status": "pass", "checks": []},
+    )
+    monkeypatch.setattr(graph_module, "validate_json", lambda *_args, **_kwargs: None)
+
+    graph = build_graph()
+    result = graph.invoke(
+        TrainingState(
+            request={
+                "topic": "X",
+                "audience": "Y",
+                "research": {"max_retries": 2},
+            }
+        ).model_dump()
+    )
+
+    assert calls["research"] == 3
+    assert result["research_revision_count"] == 2
+    assert result["packaging"]["research_qa"]["status"] == "pass"

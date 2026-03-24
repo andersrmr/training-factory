@@ -44,6 +44,21 @@ def _coerce_timeout_seconds(value: Any, default: int = 600) -> int:
     return default
 
 
+def _coerce_retry_count(value: Any, default: int = 1) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return max(0, value)
+    if isinstance(value, float):
+        return max(0, int(value))
+    if isinstance(value, str):
+        try:
+            return max(0, int(value.strip()))
+        except ValueError:
+            return default
+    return default
+
+
 def _validate_loaded_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
     errors: list[str] = []
     warnings: list[str] = []
@@ -265,6 +280,7 @@ def main() -> None:
         with st.expander("Advanced settings", expanded=False):
             run_cwd = st.text_input("run_cwd", value=str(state.get("run_cwd") or ""))
             timeout_default = _coerce_timeout_seconds(state.get("timeout_s"))
+            retry_default = _coerce_retry_count(state.get("research_max_retries"))
             timeout_s = int(
                 st.number_input(
                     "timeout_s",
@@ -273,17 +289,30 @@ def main() -> None:
                     step=1,
                 )
             )
+            research_max_retries = int(
+                st.number_input(
+                    "research_max_retries",
+                    min_value=0,
+                    value=retry_default,
+                    step=1,
+                    help="Maximum number of times to rerun research when research_qa fails.",
+                )
+            )
             command_template = st.text_area(
                 "Command Template",
                 value=str(state.get("run_command_template") or ""),
                 height=130,
             )
-            st.caption("Tokens available: {topic}, {audience}, {bundle_path}, {mode_flags}, {product_flag}")
+            st.caption(
+                "Tokens available: {topic}, {audience}, {bundle_path}, {research_max_retries}, "
+                "{mode_flags}, {product_flag}"
+            )
             st.caption("Tip: edit the template to match your repo's actual CLI entrypoint.")
 
         st.session_state["out_dir"] = out_dir
         st.session_state["run_cwd"] = run_cwd
         st.session_state["timeout_s"] = timeout_s
+        st.session_state["research_max_retries"] = research_max_retries
         st.session_state["run_command_template"] = command_template
         st.session_state["mode_flags"] = mode_flags
         st.session_state["product_flag"] = product_flag
@@ -296,6 +325,7 @@ def main() -> None:
             "topic": escaped_topic,
             "audience": audience,
             "bundle_path": bundle_path,
+            "research_max_retries": str(research_max_retries),
             "mode_flags": mode_flags,
             "product_flag": product_flag,
         }

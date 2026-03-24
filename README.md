@@ -83,7 +83,7 @@ Pipeline order: `research → research_qa → brief → curriculum → slides �
 
 Retry rules are bounded and deterministic:
 
-- `research_qa` retries once if authority/coverage thresholds fail
+- `research_qa` retries up to a configurable limit; default is once
 - `qa` retries once from `slides` if validation fails
 - No unbounded loops
 
@@ -91,7 +91,7 @@ Retry rules are bounded and deterministic:
 flowchart TD
     START([START]) --> research[research]
     research --> research_qa[research_qa]
-    research_qa -->|fail and research_revision_count < 1| research_retry[research_retry]
+    research_qa -->|fail and research_revision_count < research.max_retries| research_retry[research_retry]
     research_retry --> research
     research_qa -->|pass or retry limit reached| brief[brief]
     brief --> curriculum[curriculum]
@@ -141,6 +141,7 @@ streamlit run apps/training_factory_gui/app.py
 Capabilities:
 
 - Topic / audience / mode selection
+- Configurable `research_max_retries`
 - Deterministic CLI execution
 - Mode-scoped outputs (out_dir/<MODE>/bundle.json)
 - Run history + manifests
@@ -152,7 +153,7 @@ The GUI exposes system behavior transparently without hiding CLI execution.
 
 ## CLI Usage
 
-Generate a bundle (M1 offline):
+Generate a bundle (M1 offline, default retry limit):
 ```bash
 python -m training_factory.cli generate \
   --topic "Power BI basics" \
@@ -177,6 +178,21 @@ python -m training_factory.cli generate \
   --audience novice \
   --out out/eval/phase_a/C1/M3/bundle.json \
   --web --search-provider serpapi
+```
+
+Increase research retry attempts:
+```bash
+python -m training_factory.cli generate \
+  --topic "Power BI basics" \
+  --audience novice \
+  --out out/bundle.json \
+  --web --search-provider fallback \
+  --research-max-retries 2
+```
+
+You can also invoke the package entrypoint as:
+```bash
+python -m training_factory generate ...
 ```
 
 Write to a specific output path:

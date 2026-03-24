@@ -62,6 +62,12 @@ def generate(
     out: Path = typer.Option(Path("bundle.json"), "--out", help="Output bundle JSON path."),
     offline: bool = typer.Option(False, "--offline", help="Force offline mode for this run."),
     web: bool = typer.Option(False, "--web", help="Enable web-capable research provider selection."),
+    research_max_retries: int = typer.Option(
+        1,
+        "--research-max-retries",
+        min=0,
+        help="Maximum number of research_qa-triggered research retries.",
+    ),
     search_provider: SearchProviderChoice = typer.Option(
         SearchProviderChoice.fallback,
         "--search-provider",
@@ -71,7 +77,11 @@ def generate(
     request = {
         "topic": topic,
         "audience": audience,
-        "research": {"web": web, "search_provider": search_provider.value},
+        "research": {
+            "web": web,
+            "search_provider": search_provider.value,
+            "max_retries": research_max_retries,
+        },
     }
 
     with _offline_override(offline):
