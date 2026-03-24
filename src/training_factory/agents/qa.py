@@ -291,9 +291,16 @@ def generate_qa(
     def _normalize(payload: dict) -> dict:
         if "qa" in payload and isinstance(payload["qa"], dict):
             payload = payload["qa"]
+        checks = payload.get("checks", fallback["checks"])
+        normalized_checks = checks if isinstance(checks, list) else fallback["checks"]
+        status = "pass"
+        for item in normalized_checks:
+            if not isinstance(item, dict) or item.get("answer") != "Yes":
+                status = "fail"
+                break
         return {
-            "status": payload.get("status", fallback["status"]),
-            "checks": payload.get("checks", fallback["checks"]),
+            "status": status,
+            "checks": normalized_checks,
         }
 
     return generate_structured_output(
