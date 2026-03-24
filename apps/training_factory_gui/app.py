@@ -240,15 +240,8 @@ def main() -> None:
         else:
             mode_flags = ""
 
-        product = st.selectbox(
-            "product override",
-            ["auto", "power_bi", "power_apps", "power_platform", "enterprise_chatgpt", "generic"],
-            index=0,
-        )
-        if product == "auto":
-            product_flag = ""
-        else:
-            product_flag = f"--product {product}"
+        st.caption("Product override is not exposed by the current CLI, so GUI runs use topic-based auto-detection.")
+        product_flag = ""
 
         st.header("Run Controls")
         out_dir = st.text_input("out_dir", value=str(state.get("out_dir") or "out/gui"))
