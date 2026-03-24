@@ -18,8 +18,6 @@ _MODULE_SOURCES_PROMPT = "Does each curriculum module include sources and are th
 _AUTHORITY_PROMPT = "Does curriculum cite sufficiently authoritative sources (Tier A/B) for this topic?"
 _SEMANTIC_PROMPTS = {
     _SLIDES_ALIGN_PROMPT,
-    _SLIDES_REFERENCE_LAB_PROMPT,
-    _TEMPLATES_ALIGN_PROMPT,
 }
 
 
@@ -93,7 +91,25 @@ def _templates_align_with_materials(slides: dict[str, Any], lab: dict[str, Any],
     combined = f"{readme} {runbook}"
     has_lab_ref = any(token in combined for token in ("lab", "exercise", "checkpoint"))
     has_slide_ref = any(token in combined for token in ("slide", "deck", "module", "lesson"))
-    return has_lab_ref and has_slide_ref
+    slide_titles = slides.get("deck")
+    title_token_overlap = False
+    if isinstance(slide_titles, list):
+        template_tokens = set(combined.replace("-", " ").split())
+        for item in slide_titles:
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get("title", "")).strip().lower()
+            if not title:
+                continue
+            title_tokens = {
+                token
+                for token in "".join(ch if ch.isalnum() else " " for ch in title).split()
+                if len(token) > 3
+            }
+            if title_tokens and title_tokens & template_tokens:
+                title_token_overlap = True
+                break
+    return has_lab_ref and has_slide_ref and title_token_overlap
 
 
 def _is_plausible_markdown(text: str) -> bool:
@@ -254,21 +270,11 @@ def _fallback_semantic_checks(
     *,
     slides_have_content: bool,
     lab_has_structure: bool,
-    slides_reference_lab: bool,
-    templates_align: bool,
 ) -> list[dict[str, str]]:
     return [
         {
             "prompt": _SLIDES_ALIGN_PROMPT,
             "answer": "Yes" if slides_have_content and lab_has_structure else "No",
-        },
-        {
-            "prompt": _SLIDES_REFERENCE_LAB_PROMPT,
-            "answer": "Yes" if slides_reference_lab else "No",
-        },
-        {
-            "prompt": _TEMPLATES_ALIGN_PROMPT,
-            "answer": "Yes" if templates_align else "No",
         },
     ]
 
@@ -345,8 +351,6 @@ def generate_qa(
     fallback_semantic_checks = _fallback_semantic_checks(
         slides_have_content=slides_have_content,
         lab_has_structure=lab_has_structure,
-        slides_reference_lab=slides_reference_lab,
-        templates_align=templates_align,
     )
     fallback = {"status": "fail", "checks": deterministic_checks}
     offline_stub = {"status": "fail", "checks": fallback_semantic_checks}
@@ -355,9 +359,7 @@ def generate_qa(
         "Produce QA with keys status and checks. "
         "status must be pass or fail. checks is an array of {prompt, answer}. "
         "Return only these semantic checks: "
-        "(1) slides align with curriculum/lab objectives using slide titles/bullets, "
-        "(2) slides reference the lab appropriately at least conceptually, "
-        "(3) templates align with slides and lab (README + RUNBOOK consistent). "
+        "(1) slides align with curriculum/lab objectives using slide titles/bullets. "
         "For each check, answer Yes or No. "
         f"Slides: {json.dumps(slides)}. Lab: {json.dumps(lab)}. Templates: {json.dumps(templates)}. "
         f"Curriculum: {json.dumps(curriculum)}. Research: {json.dumps(research)}"
