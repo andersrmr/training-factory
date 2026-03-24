@@ -38,9 +38,32 @@ def _structured_fallback(legacy: dict[str, str]) -> dict[str, dict[str, str]]:
     }
 
 
+def _normalize_document_node(
+    node: Any,
+    *,
+    expected_filename: str,
+    fallback: dict[str, str],
+) -> dict[str, str]:
+    if not isinstance(node, dict):
+        return fallback
+
+    filename = node.get("filename", expected_filename)
+    content = node.get("content")
+    if not isinstance(filename, str):
+        filename = expected_filename
+    if not isinstance(content, str):
+        return fallback
+
+    return {"filename": filename, "content": content}
+
+
 def _legacy_to_structured(payload: dict[str, Any], fallback: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
     readme = payload.get("README.md", fallback["readme_md"]["content"])
     runbook = payload.get("RUNBOOK.md", fallback["runbook_md"]["content"])
+    if not isinstance(readme, str):
+        readme = fallback["readme_md"]["content"]
+    if not isinstance(runbook, str):
+        runbook = fallback["runbook_md"]["content"]
     return {
         "readme_md": {"filename": "README.md", "content": readme},
         "runbook_md": {"filename": "RUNBOOK.md", "content": runbook},
@@ -55,9 +78,13 @@ def _structured_to_legacy(payload: dict[str, Any], fallback: dict[str, str]) -> 
     runbook_content = fallback["RUNBOOK.md"]
 
     if isinstance(readme, dict):
-        readme_content = readme.get("content", readme_content)
+        candidate = readme.get("content", readme_content)
+        if isinstance(candidate, str):
+            readme_content = candidate
     if isinstance(runbook, dict):
-        runbook_content = runbook.get("content", runbook_content)
+        candidate = runbook.get("content", runbook_content)
+        if isinstance(candidate, str):
+            runbook_content = candidate
 
     return {"README.md": readme_content, "RUNBOOK.md": runbook_content}
 
@@ -110,8 +137,16 @@ def generate_templates(slides: dict[str, Any], *, retry_strategy: dict[str, Any]
                 readme = payload.get("readme_md")
                 runbook = payload.get("runbook_md")
                 return {
-                    "readme_md": readme if isinstance(readme, dict) else structured_fallback["readme_md"],
-                    "runbook_md": runbook if isinstance(runbook, dict) else structured_fallback["runbook_md"],
+                    "readme_md": _normalize_document_node(
+                        readme,
+                        expected_filename="README.md",
+                        fallback=structured_fallback["readme_md"],
+                    ),
+                    "runbook_md": _normalize_document_node(
+                        runbook,
+                        expected_filename="RUNBOOK.md",
+                        fallback=structured_fallback["runbook_md"],
+                    ),
                 }
             return _legacy_to_structured(payload, structured_fallback)
 
