@@ -22,6 +22,7 @@ from tf_gui.bundle_view import (
 )
 from tf_gui.runner import run_pipeline_from_template, run_pipeline_in_process, save_bundle_to_path
 from tf_gui.state import clear_bundle, get_state, init_state_defaults
+from training_factory.settings import get_settings
 
 
 def _format_ts(value: Any) -> str:
@@ -107,6 +108,28 @@ def _validate_loaded_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
                 break
 
     return {"ok": not errors, "errors": errors, "warnings": warnings}
+
+
+def _render_secret_notice(*, mode: str) -> None:
+    settings = get_settings()
+    missing: list[str] = []
+    notes: list[str] = []
+
+    if not settings.openai_api_key:
+        missing.append("`OPENAI_API_KEY`")
+        notes.append("Without it, model-backed generation and semantic QA will not run normally.")
+
+    if mode == "M3" and not settings.serpapi_api_key:
+        missing.append("`SERPAPI_API_KEY`")
+        notes.append("Without it, M3 will fall back to the simpler fallback search provider.")
+
+    if not missing:
+        return
+
+    message = "Add these Streamlit secrets to enable full functionality: " + ", ".join(missing) + "."
+    if notes:
+        message += " " + " ".join(notes)
+    st.warning(message)
 
 
 def _render_run_summary(summary: dict[str, Any]) -> None:
@@ -294,8 +317,9 @@ def main() -> None:
             mode_flags = "--web --search-provider serpapi"
         else:
             mode_flags = ""
+        _render_secret_notice(mode=mode)
 
-        st.caption("Product override is not exposed by the current CLI, so GUI runs use topic-based auto-detection.")
+        st.caption("The app automatically detects the topic area and uses it to guide research.")
         product_flag = ""
 
         st.header("Run Controls")
@@ -511,8 +535,8 @@ def main() -> None:
             st.markdown(
                 """
 ### Placeholder
-- Use **Run pipeline** to generate and auto-load the produced bundle.
-- Or use **Load last bundle** / **Upload bundle.json**.
+- Use **Run pipeline** to generate and load a bundle in memory.
+- Or use **Load last bundle** / **Upload bundle.json** from the sidebar.
                 """
             )
 
