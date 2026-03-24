@@ -62,14 +62,27 @@ def _structured_to_legacy(payload: dict[str, Any], fallback: dict[str, str]) -> 
     return {"README.md": readme_content, "RUNBOOK.md": runbook_content}
 
 
-def generate_templates(slides: dict[str, Any]) -> dict[str, Any]:
+def generate_templates(slides: dict[str, Any], *, retry_strategy: dict[str, Any] | None = None) -> dict[str, Any]:
     deck = slides.get("deck", [])
     slide_count = len(deck)
+    strategy = retry_strategy or {}
+    failed_checks = {
+        str(item).strip()
+        for item in strategy.get("failed_checks", [])
+        if isinstance(item, str) and str(item).strip()
+    }
 
     mode = _schema_mode()
     legacy_fallback = _legacy_fallback(slide_count)
     structured_fallback = _structured_fallback(legacy_fallback)
     fallback = structured_fallback if mode == "structured" else legacy_fallback
+    retry_guidance = ""
+    if "templates_alignment" in failed_checks:
+        retry_guidance += (
+            " Make README.md and RUNBOOK.md explicitly align with slide topics, module flow, and lab/checkpoint usage."
+        )
+    if "slides_reference_lab" in failed_checks:
+        retry_guidance += " Explicitly mention the lab, exercise flow, and checkpoints in both template documents."
 
     if mode == "structured":
         prompt = (
@@ -77,12 +90,14 @@ def generate_templates(slides: dict[str, Any]) -> dict[str, Any]:
             "Produce templates with keys readme_md and runbook_md. "
             "Each key must contain an object with filename and content. "
             "Filenames must be README.md and RUNBOOK.md. "
+            f"{retry_guidance} "
             f"Slides: {json.dumps(slides)}"
         )
     else:
         prompt = (
             "Return JSON only. Do not include markdown fences, labels, or extra prose. "
             "Produce templates with keys README.md and RUNBOOK.md (both non-empty markdown strings). "
+            f"{retry_guidance} "
             f"Slides: {json.dumps(slides)}"
         )
 

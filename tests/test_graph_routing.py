@@ -37,7 +37,8 @@ def _curriculum(brief: dict, _: dict) -> dict:
     }
 
 
-def _slides(_: dict) -> dict:
+def _slides(_: dict, *, retry_strategy: dict | None = None) -> dict:
+    _ = retry_strategy
     return {"deck": [{"slide": 1, "title": "S1", "bullets": ["b1"]}]}
 
 
@@ -46,7 +47,8 @@ def test_qa_pass_routes_to_package(monkeypatch) -> None:
 
     calls = {"slides": 0}
 
-    def slides_fn(curriculum: dict) -> dict:
+    def slides_fn(curriculum: dict, *, retry_strategy: dict | None = None) -> dict:
+        _ = retry_strategy
         calls["slides"] += 1
         return _slides(curriculum)
 
@@ -71,10 +73,16 @@ def test_qa_fail_retries_once_then_packages(monkeypatch) -> None:
     import training_factory.graph as graph_module
 
     calls = {"slides": 0, "qa": 0}
+    template_retry_strategies: list[dict] = []
 
-    def slides_fn(curriculum: dict) -> dict:
+    def slides_fn(curriculum: dict, *, retry_strategy: dict | None = None) -> dict:
+        _ = retry_strategy
         calls["slides"] += 1
         return _slides(curriculum)
+
+    def templates_fn(_slides: dict, *, retry_strategy: dict | None = None) -> dict:
+        template_retry_strategies.append(retry_strategy or {})
+        return {"readme_md": {"content": "r"}, "runbook_md": {"content": "r"}}
 
     def qa_fn(
         _slides: dict,
@@ -85,18 +93,25 @@ def test_qa_fail_retries_once_then_packages(monkeypatch) -> None:
     ) -> dict:
         calls["qa"] += 1
         if calls["qa"] == 1:
-            return {"status": "fail", "checks": []}
+            return {
+                "status": "fail",
+                "checks": [{"prompt": "Do templates align with slides and lab?", "answer": "No"}],
+            }
         return {"status": "pass", "checks": []}
 
     monkeypatch.setattr(graph_module, "generate_brief", _brief)
     monkeypatch.setattr(graph_module, "generate_curriculum", _curriculum)
     monkeypatch.setattr(graph_module, "generate_slides", slides_fn)
+    monkeypatch.setattr(graph_module, "generate_templates", templates_fn)
     monkeypatch.setattr(graph_module, "generate_qa", qa_fn)
 
     graph = build_graph()
     result = graph.invoke(TrainingState(request={"topic": "X", "audience": "Y"}).model_dump())
 
     assert calls["slides"] == 2
+    assert template_retry_strategies[0] == {"failed_checks": [], "attempt": 0}
+    assert template_retry_strategies[1]["failed_checks"] == ["templates_alignment"]
+    assert template_retry_strategies[1]["attempt"] == 1
     assert result["packaging"]["qa"]["status"] == "pass"
     assert result["revision_count"] == 1
 
@@ -106,7 +121,8 @@ def test_qa_fail_with_revision_limit_packages_without_retry(monkeypatch) -> None
 
     calls = {"slides": 0}
 
-    def slides_fn(curriculum: dict) -> dict:
+    def slides_fn(curriculum: dict, *, retry_strategy: dict | None = None) -> dict:
+        _ = retry_strategy
         calls["slides"] += 1
         return _slides(curriculum)
 

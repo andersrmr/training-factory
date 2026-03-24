@@ -41,15 +41,18 @@ def _curriculum(brief: dict, _: dict) -> dict:
     }
 
 
-def _slides(_: dict) -> dict:
+def _slides(_: dict, *, retry_strategy: dict | None = None) -> dict:
+    _ = retry_strategy
     return {"deck": [{"slide": 1, "title": "S1", "bullets": ["b1"]}]}
 
 
-def _lab(_: dict) -> dict:
+def _lab(_: dict, *, retry_strategy: dict | None = None) -> dict:
+    _ = retry_strategy
     return {"labs": [{"title": "L1", "instructions": ["i1"], "expected_outcome": "o1"}]}
 
 
-def _templates(_: dict) -> dict:
+def _templates(_: dict, *, retry_strategy: dict | None = None) -> dict:
+    _ = retry_strategy
     return {"readme_md": {"content": "r"}, "runbook_md": {"content": "r"}}
 
 

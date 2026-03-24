@@ -139,27 +139,90 @@ def _research_retry_node(state: GraphState) -> dict[str, Any]:
     }
 
 
+def _failed_qa_checks(qa: dict[str, Any]) -> list[str]:
+    checks = qa.get("checks", [])
+    if not isinstance(checks, list):
+        return []
+
+    failed: list[str] = []
+    for item in checks:
+        if not isinstance(item, dict) or item.get("answer") != "No":
+            continue
+        prompt = str(item.get("prompt", "")).strip()
+        if prompt == "Do slides align with curriculum/lab objectives?":
+            failed.append("slides_alignment")
+        elif prompt == "Do slides reference the lab appropriately?":
+            failed.append("slides_reference_lab")
+        elif prompt == "Does lab exist and include steps/checkpoints?":
+            failed.append("lab_structure")
+        elif prompt == "Do templates align with slides and lab?":
+            failed.append("templates_alignment")
+    return failed
+
+
+def _qa_retry_strategy(state: GraphState) -> dict[str, Any]:
+    request = state.get("request", {})
+    if not isinstance(request, dict):
+        return {"failed_checks": [], "attempt": 0}
+    qa_cfg = request.get("qa", {})
+    if not isinstance(qa_cfg, dict):
+        return {"failed_checks": [], "attempt": 0}
+    strategy = qa_cfg.get("retry_strategy", {})
+    if not isinstance(strategy, dict):
+        return {"failed_checks": [], "attempt": 0}
+    failed_checks = [
+        str(item).strip()
+        for item in strategy.get("failed_checks", [])
+        if isinstance(item, str) and str(item).strip()
+    ]
+    attempt = strategy.get("attempt", 0)
+    if not isinstance(attempt, int):
+        attempt = 0
+    return {"failed_checks": failed_checks, "attempt": max(0, attempt)}
+
+
+def _qa_retry_node(state: GraphState) -> dict[str, Any]:
+    revision_count = int(state.get("revision_count", 0))
+    request = state.get("request", {})
+    if not isinstance(request, dict):
+        request = {}
+    qa_cfg = request.get("qa", {})
+    if not isinstance(qa_cfg, dict):
+        qa_cfg = {}
+
+    failed_checks = _failed_qa_checks(state.get("qa", {}))
+    return {
+        "revision_count": revision_count + 1,
+        "request": {
+            **request,
+            "qa": {
+                **qa_cfg,
+                "retry_strategy": {
+                    "failed_checks": failed_checks,
+                    "attempt": revision_count + 1,
+                },
+            },
+        },
+    }
+
+
 def _curriculum_node(state: GraphState) -> dict[str, Any]:
     curriculum = generate_curriculum(state["brief"], state["research"])
     return {"curriculum": curriculum}
 
 
 def _slides_node(state: GraphState) -> dict[str, Any]:
-    slides = generate_slides(state["curriculum"])
-    qa_status = state.get("qa", {}).get("status")
-    revision_count = int(state.get("revision_count", 0))
-    if qa_status == "fail" and revision_count < 1:
-        return {"slides": slides, "revision_count": revision_count + 1}
+    slides = generate_slides(state["curriculum"], retry_strategy=_qa_retry_strategy(state))
     return {"slides": slides}
 
 
 def _lab_node(state: GraphState) -> dict[str, Any]:
-    lab = generate_lab(state["curriculum"])
+    lab = generate_lab(state["curriculum"], retry_strategy=_qa_retry_strategy(state))
     return {"lab": lab}
 
 
 def _templates_node(state: GraphState) -> dict[str, Any]:
-    templates = generate_templates(state["slides"])
+    templates = generate_templates(state["slides"], retry_strategy=_qa_retry_strategy(state))
     return {"templates": templates}
 
 
@@ -178,7 +241,7 @@ def _route_after_qa(state: GraphState) -> str:
     qa_status = state.get("qa", {}).get("status")
     revision_count = int(state.get("revision_count", 0))
     if qa_status == "fail" and revision_count < 1:
-        return "slides"
+        return "qa_retry"
     return "package"
 
 
@@ -277,6 +340,7 @@ def build_graph():
     graph.add_node("lab", _lab_node)
     graph.add_node("templates", _templates_node)
     graph.add_node("qa", _qa_node)
+    graph.add_node("qa_retry", _qa_retry_node)
     graph.add_node("package", _package_node)
 
     graph.add_edge(START, "research")
@@ -295,8 +359,9 @@ def build_graph():
     graph.add_conditional_edges(
         "qa",
         _route_after_qa,
-        {"slides": "slides", "package": "package"},
+        {"qa_retry": "qa_retry", "package": "package"},
     )
+    graph.add_edge("qa_retry", "slides")
     graph.add_edge("package", END)
 
     return graph.compile()

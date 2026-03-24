@@ -17,7 +17,7 @@ def _module_bullets(title: str) -> list[str]:
     ]
 
 
-def generate_slides(curriculum: dict[str, Any]) -> dict[str, Any]:
+def generate_slides(curriculum: dict[str, Any], *, retry_strategy: dict[str, Any] | None = None) -> dict[str, Any]:
     modules = curriculum.get("modules", [])
     deck = []
     for idx, module in enumerate(modules, start=1):
@@ -31,6 +31,22 @@ def generate_slides(curriculum: dict[str, Any]) -> dict[str, Any]:
         )
 
     fallback = {"deck": deck}
+    strategy = retry_strategy or {}
+    failed_checks = {
+        str(item).strip()
+        for item in strategy.get("failed_checks", [])
+        if isinstance(item, str) and str(item).strip()
+    }
+    retry_guidance = ""
+    if "slides_alignment" in failed_checks:
+        retry_guidance += (
+            " Strengthen slide-to-curriculum alignment by making each title and bullet explicitly reflect the "
+            "module goal and cited topic."
+        )
+    if "slides_reference_lab" in failed_checks:
+        retry_guidance += (
+            " Ensure slide bullets explicitly mention the associated hands-on lab, exercise, or checkpoint when relevant."
+        )
     prompt = (
         "Return JSON only. Do not include markdown fences, labels, or extra prose. "
         "Produce slides with key deck, where each item has "
@@ -42,6 +58,7 @@ def generate_slides(curriculum: dict[str, Any]) -> dict[str, Any]:
         "(4) one short practical example or use case. "
         "Do not use placeholders like 'Learning objective', 'Core concept', or 'Example'; "
         "derive all bullet text from the module title. "
+        f"{retry_guidance} "
         f"Curriculum: {json.dumps(curriculum)}"
     )
 

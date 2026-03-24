@@ -107,19 +107,31 @@ def _legacy_to_single(lab: dict[str, Any], fallback: dict[str, Any]) -> dict[str
     }
 
 
-def generate_lab(curriculum: dict[str, Any]) -> dict[str, Any]:
+def generate_lab(curriculum: dict[str, Any], *, retry_strategy: dict[str, Any] | None = None) -> dict[str, Any]:
     modules = curriculum.get("modules", [])
     mode = _schema_mode()
+    strategy = retry_strategy or {}
+    failed_checks = {
+        str(item).strip()
+        for item in strategy.get("failed_checks", [])
+        if isinstance(item, str) and str(item).strip()
+    }
 
     legacy_fallback = _legacy_fallback(modules)
     single_fallback = _single_fallback(modules)
     fallback = single_fallback if mode == "single" else legacy_fallback
+    retry_guidance = ""
+    if "lab_structure" in failed_checks or "slides_reference_lab" in failed_checks:
+        retry_guidance = (
+            " Strengthen the lab structure by including concrete numbered steps and explicit checkpoints that slides can reference."
+        )
 
     if mode == "single":
         prompt = (
             "Return JSON only. Do not include markdown fences, labels, or extra prose. "
             "Produce a lab with keys title, objective, prerequisites, setup, steps, and checkpoints. "
             "steps must contain numbered instructional objects and checkpoints must contain validation criteria. "
+            f"{retry_guidance} "
             f"Curriculum: {json.dumps(curriculum)}"
         )
     else:
@@ -127,6 +139,7 @@ def generate_lab(curriculum: dict[str, Any]) -> dict[str, Any]:
             "Return JSON only. Do not include markdown fences, labels, or extra prose. "
             "Produce lab activities with key labs. "
             "Each lab must include title, instructions (string array), and expected_outcome. "
+            f"{retry_guidance} "
             f"Curriculum: {json.dumps(curriculum)}"
         )
 
