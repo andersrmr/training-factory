@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 import os
 from pathlib import Path
 import sys
@@ -19,7 +20,7 @@ from tf_gui.bundle_view import (
     render_bundle_summary,
     safe_read_text,
 )
-from tf_gui.runner import run_pipeline_from_template
+from tf_gui.runner import run_pipeline_from_template, run_pipeline_in_process, save_bundle_to_path
 from tf_gui.state import clear_bundle, get_state, init_state_defaults
 
 
@@ -204,6 +205,26 @@ def _render_run_log_tab(last_run_result: dict[str, Any] | None) -> None:
         st.code(str(last_run_result.get("stderr", "")), language="text")
 
 
+def _render_bundle_actions(bundle: dict[str, Any], default_save_path: str) -> None:
+    bundle_json = json.dumps(bundle, indent=2) + "\n"
+    st.download_button(
+        label="Download bundle.json",
+        data=bundle_json,
+        file_name="bundle.json",
+        mime="application/json",
+    )
+
+    save_path = st.text_input("save_bundle_path", value=default_save_path)
+    st.session_state["save_bundle_path"] = save_path
+    if st.button("Save current bundle to disk"):
+        try:
+            saved_path = save_bundle_to_path(bundle, save_path)
+            st.session_state["last_bundle_path"] = saved_path
+            st.success(f"Saved bundle to {saved_path}.")
+        except ValueError as exc:
+            st.error(str(exc))
+
+
 def _render_about_tab() -> None:
     st.subheader("Pipeline")
     st.markdown(
@@ -278,8 +299,17 @@ def main() -> None:
         product_flag = ""
 
         st.header("Run Controls")
+        execution_mode = st.radio(
+            "execution mode",
+            ["In-process (Recommended)", "CLI subprocess"],
+            index=0 if str(state.get("execution_mode") or "in_process") == "in_process" else 1,
+        )
+        execution_mode_value = "in_process" if execution_mode.startswith("In-process") else "cli"
         out_dir = st.text_input("out_dir", value=str(state.get("out_dir") or "out/gui"))
-        st.caption("Bundles are written under out_dir/<MODE>/bundle.json to avoid overwriting.")
+        if execution_mode_value == "in_process":
+            st.caption("In-process runs keep the bundle in memory. `out_dir` is only used for optional logs and saves.")
+        else:
+            st.caption("CLI runs write bundles under out_dir/<MODE>/bundle.json before the GUI reloads them.")
 
         with st.expander("Advanced settings", expanded=False):
             run_cwd = st.text_input("run_cwd", value=str(state.get("run_cwd") or ""))
@@ -302,17 +332,22 @@ def main() -> None:
                     help="Maximum number of times to rerun research when research_qa fails.",
                 )
             )
-            command_template = st.text_area(
-                "Command Template",
-                value=str(state.get("run_command_template") or ""),
-                height=130,
-            )
-            st.caption(
-                "Tokens available: {topic}, {audience}, {bundle_path}, {research_max_retries}, "
-                "{mode_flags}, {product_flag}"
-            )
-            st.caption("Tip: edit the template to match your repo's actual CLI entrypoint.")
+            if execution_mode_value == "cli":
+                command_template = st.text_area(
+                    "Command Template",
+                    value=str(state.get("run_command_template") or ""),
+                    height=130,
+                )
+                st.caption(
+                    "Tokens available: {topic}, {audience}, {bundle_path}, {research_max_retries}, "
+                    "{mode_flags}, {product_flag}"
+                )
+                st.caption("Tip: edit the template to match this repo's actual CLI entrypoint.")
+            else:
+                command_template = str(state.get("run_command_template") or "")
+                st.caption("CLI template is only used in CLI subprocess mode.")
 
+        st.session_state["execution_mode"] = execution_mode_value
         st.session_state["out_dir"] = out_dir
         st.session_state["run_cwd"] = run_cwd
         st.session_state["timeout_s"] = timeout_s
@@ -323,7 +358,6 @@ def main() -> None:
 
         escaped_topic = topic.replace('"', '\\"')
         bundle_path = f"{out_dir}/{mode}/bundle.json"
-        os.makedirs(os.path.dirname(bundle_path), exist_ok=True)
         os.makedirs(f"{out_dir}/logs", exist_ok=True)
         tokens = {
             "topic": escaped_topic,
@@ -361,30 +395,53 @@ def main() -> None:
                 st.error("No loaded bundle available for validation.")
 
         if run_clicked:
-            result = run_pipeline_from_template(
-                command_template,
-                tokens,
-                cwd=run_cwd.strip() or None,
-                timeout_s=timeout_s,
-                log_dir=f"{out_dir}/logs",
-            )
+            if execution_mode_value == "in_process":
+                offline = mode == "M1"
+                web = mode in {"M2", "M3"}
+                search_provider = "fallback" if mode in {"M1", "M2"} else "serpapi"
+                result, bundle_payload = run_pipeline_in_process(
+                    topic=topic,
+                    audience=audience,
+                    web=web,
+                    search_provider=search_provider,
+                    research_max_retries=research_max_retries,
+                    offline=offline,
+                    log_dir=f"{out_dir}/logs",
+                )
+            else:
+                result = run_pipeline_from_template(
+                    command_template,
+                    tokens,
+                    cwd=run_cwd.strip() or None,
+                    timeout_s=timeout_s,
+                    log_dir=f"{out_dir}/logs",
+                )
+                bundle_payload = None
             st.session_state["last_run_result"] = result
 
             with st.expander("Resolved command", expanded=False):
                 st.code(" ".join(result.get("command", [])), language="bash")
                 st.write(f"return code: {result.get('returncode')}")
 
-            if result.get("ok") and isinstance(result.get("bundle_path"), str):
-                resolved_bundle_path = str(result["bundle_path"])
-                try:
-                    st.session_state["bundle"] = load_bundle_from_path(resolved_bundle_path)
-                    st.session_state["last_bundle_path"] = resolved_bundle_path
+            if execution_mode_value == "in_process":
+                if result.get("ok") and isinstance(bundle_payload, dict):
+                    st.session_state["bundle"] = bundle_payload
                     st.session_state["last_loaded_at"] = datetime.now().isoformat(timespec="seconds")
-                    st.success("Pipeline run succeeded and bundle was loaded.")
-                except ValueError as exc:
-                    st.error(f"Pipeline finished but bundle load failed: {exc}")
+                    st.success("Pipeline run succeeded and bundle is loaded in memory.")
+                else:
+                    st.error("Pipeline run failed. See Run Log tab for details.")
             else:
-                st.error("Pipeline run failed. See Run Log tab for details.")
+                if result.get("ok") and isinstance(result.get("bundle_path"), str):
+                    resolved_bundle_path = str(result["bundle_path"])
+                    try:
+                        st.session_state["bundle"] = load_bundle_from_path(resolved_bundle_path)
+                        st.session_state["last_bundle_path"] = resolved_bundle_path
+                        st.session_state["last_loaded_at"] = datetime.now().isoformat(timespec="seconds")
+                        st.success("Pipeline run succeeded and bundle was loaded from disk.")
+                    except ValueError as exc:
+                        st.error(f"Pipeline finished but bundle load failed: {exc}")
+                else:
+                    st.error("Pipeline run failed. See Run Log tab for details.")
 
         if isinstance(validate_result, dict):
             with st.expander("Validation result", expanded=False):
@@ -417,6 +474,13 @@ def main() -> None:
         if st.button("Clear loaded bundle"):
             clear_bundle()
             st.info("Cleared loaded bundle.")
+
+        if isinstance(st.session_state.get("bundle"), dict):
+            st.header("Bundle Actions")
+            _render_bundle_actions(
+                st.session_state["bundle"],
+                str(state.get("save_bundle_path") or f"{out_dir}/{mode}/bundle.json"),
+            )
 
         st.header("Status")
         loaded = st.session_state.get("bundle") is not None

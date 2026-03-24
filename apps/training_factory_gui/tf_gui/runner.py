@@ -2,12 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import json
 import os
 from pathlib import Path
 import shlex
 import subprocess
 import time
-from typing import TypedDict
+from typing import Any, TypedDict
+
+from training_factory.graph import run_pipeline
+from training_factory.settings import get_settings
+from training_factory.utils.json_schema import validate_json
+
+SCHEMA_PATH = Path(__file__).resolve().parents[3] / "schemas" / "bundle.schema.json"
 
 
 class RunResult(TypedDict):
@@ -21,6 +28,46 @@ class RunResult(TypedDict):
     stderr: str
     bundle_path: str | None
     log_path: str | None
+
+
+def _offline_override(enabled: bool):
+    if not enabled:
+        class _NoopContext:
+            def __enter__(self):
+                return None
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        return _NoopContext()
+
+    class _OfflineContext:
+        def __enter__(self):
+            self.previous = os.environ.get("TRAINING_FACTORY_OFFLINE")
+            os.environ["TRAINING_FACTORY_OFFLINE"] = "1"
+            get_settings.cache_clear()
+            return None
+
+        def __exit__(self, exc_type, exc, tb):
+            if self.previous is None:
+                os.environ.pop("TRAINING_FACTORY_OFFLINE", None)
+            else:
+                os.environ["TRAINING_FACTORY_OFFLINE"] = self.previous
+            get_settings.cache_clear()
+            return False
+
+    return _OfflineContext()
+
+
+def _extract_bundle(state: Any) -> dict[str, Any]:
+    state_data = state.model_dump() if hasattr(state, "model_dump") else dict(state)
+    packaging = state_data.get("packaging", {})
+    bundle = packaging.get("bundle") if isinstance(packaging, dict) else None
+    if isinstance(bundle, dict):
+        return bundle
+    if isinstance(packaging, dict):
+        return packaging
+    raise ValueError("Pipeline did not return a valid packaging bundle")
 
 
 @dataclass
@@ -116,6 +163,97 @@ def _write_log(log_dir: str, payload: _RunLogPayload) -> str | None:
         return str(log_path)
     except Exception:
         return None
+
+
+def save_bundle_to_path(bundle: dict[str, Any], path: str) -> str:
+    target = Path(path.strip())
+    if not str(target):
+        raise ValueError("Bundle save path is empty.")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")
+    return str(target)
+
+
+def run_pipeline_in_process(
+    *,
+    topic: str,
+    audience: str,
+    web: bool,
+    search_provider: str,
+    research_max_retries: int,
+    offline: bool,
+    log_dir: str,
+) -> tuple[RunResult, dict[str, Any] | None]:
+    started_dt = datetime.now()
+    started_at = started_dt.isoformat(timespec="seconds")
+    started_clock = time.perf_counter()
+    command = [
+        "in-process",
+        "run_pipeline",
+        f"topic={topic}",
+        f"audience={audience}",
+        f"web={web}",
+        f"search_provider={search_provider}",
+        f"research_max_retries={research_max_retries}",
+        f"offline={offline}",
+    ]
+
+    stdout = ""
+    stderr = ""
+    bundle: dict[str, Any] | None = None
+    returncode = 0
+    try:
+        request_research = {
+            "web": web,
+            "search_provider": search_provider,
+            "max_retries": research_max_retries,
+        }
+        with _offline_override(offline):
+            state = run_pipeline(topic=topic, audience=audience, research=request_research)
+        bundle = _extract_bundle(state)
+        validate_json(bundle, SCHEMA_PATH)
+        module_count = len(bundle.get("curriculum", {}).get("modules", [])) if isinstance(bundle, dict) else 0
+        slide_count = len(bundle.get("slides", {}).get("deck", [])) if isinstance(bundle, dict) else 0
+        qa_status = bundle.get("qa", {}).get("status", "unknown") if isinstance(bundle, dict) else "unknown"
+        stdout = "\n".join(
+            [
+                "Pipeline run completed in-process.",
+                f"Topic: {topic}",
+                f"Curriculum modules: {module_count}",
+                f"Slides: {slide_count}",
+                f"QA status: {qa_status}",
+            ]
+        )
+    except Exception as exc:
+        returncode = 1
+        stderr = str(exc)
+
+    finished_dt = datetime.now()
+    finished_at = finished_dt.isoformat(timespec="seconds")
+    duration_s = round(time.perf_counter() - started_clock, 3)
+    payload = _RunLogPayload(
+        command=command,
+        started_at=started_at,
+        finished_at=finished_at,
+        duration_s=duration_s,
+        returncode=returncode,
+        stdout=stdout,
+        stderr=stderr,
+    )
+    log_path = _write_log(log_dir, payload)
+    result: RunResult = {
+        "ok": returncode == 0 and bundle is not None,
+        "returncode": returncode,
+        "command": command,
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "duration_s": duration_s,
+        "stdout": stdout,
+        "stderr": stderr,
+        "bundle_path": None,
+        "log_path": log_path,
+    }
+    return result, bundle
 
 
 def run_pipeline_from_template(

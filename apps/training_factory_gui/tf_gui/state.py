@@ -4,6 +4,7 @@ import streamlit as st
 
 
 _DEFAULT_LAST_BUNDLE_PATH = "out/gui/M1/bundle.json"
+_DEFAULT_SAVE_BUNDLE_PATH = "out/gui/manual/bundle.json"
 _DEFAULT_OUT_DIR = "out/gui"
 _DEFAULT_RUN_TEMPLATE = (
     'python -m training_factory.cli generate --topic "{topic}" --audience {audience} '
@@ -18,8 +19,12 @@ def init_state_defaults() -> None:
         st.session_state["last_loaded_at"] = None
     if "last_bundle_path" not in st.session_state:
         st.session_state["last_bundle_path"] = _DEFAULT_LAST_BUNDLE_PATH
+    if "save_bundle_path" not in st.session_state:
+        st.session_state["save_bundle_path"] = _DEFAULT_SAVE_BUNDLE_PATH
     if "run_command_template" not in st.session_state:
         st.session_state["run_command_template"] = _DEFAULT_RUN_TEMPLATE
+    if "execution_mode" not in st.session_state:
+        st.session_state["execution_mode"] = "in_process"
     if "run_cwd" not in st.session_state:
         st.session_state["run_cwd"] = ""
     if "out_dir" not in st.session_state:
@@ -42,7 +47,9 @@ def get_state() -> dict[str, object]:
         "bundle": st.session_state.get("bundle"),
         "last_loaded_at": st.session_state.get("last_loaded_at"),
         "last_bundle_path": st.session_state.get("last_bundle_path"),
+        "save_bundle_path": st.session_state.get("save_bundle_path"),
         "run_command_template": st.session_state.get("run_command_template"),
+        "execution_mode": st.session_state.get("execution_mode"),
         "run_cwd": st.session_state.get("run_cwd"),
         "out_dir": st.session_state.get("out_dir"),
         "last_run_result": st.session_state.get("last_run_result"),
