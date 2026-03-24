@@ -29,6 +29,21 @@ def _format_ts(value: Any) -> str:
     return "(not loaded)"
 
 
+def _coerce_timeout_seconds(value: Any, default: int = 600) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return default
+    return default
+
+
 def _validate_loaded_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
     errors: list[str] = []
     warnings: list[str] = []
@@ -249,11 +264,12 @@ def main() -> None:
 
         with st.expander("Advanced settings", expanded=False):
             run_cwd = st.text_input("run_cwd", value=str(state.get("run_cwd") or ""))
+            timeout_default = _coerce_timeout_seconds(state.get("timeout_s"))
             timeout_s = int(
                 st.number_input(
                     "timeout_s",
                     min_value=1,
-                    value=int(state.get("timeout_s") or 600),
+                    value=timeout_default,
                     step=1,
                 )
             )
