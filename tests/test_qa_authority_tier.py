@@ -102,8 +102,8 @@ def test_qa_normalization_forces_fail_when_any_check_is_no(monkeypatch) -> None:
             {
                 "status": "pass",
                 "checks": [
-                    {"prompt": "check 1", "answer": "Yes"},
-                    {"prompt": "check 2", "answer": "No"},
+                    {"prompt": "Do slides align with curriculum/lab objectives?", "answer": "Yes"},
+                    {"prompt": "Do templates align with slides and lab?", "answer": "No"},
                 ],
             }
         )
@@ -128,8 +128,8 @@ def test_qa_normalization_converts_pass_fail_answers_to_yes_no(monkeypatch) -> N
             {
                 "status": "pass",
                 "checks": [
-                    {"prompt": "check 1", "answer": "pass"},
-                    {"prompt": "check 2", "answer": "passed"},
+                    {"prompt": "Do slides align with curriculum/lab objectives?", "answer": "pass"},
+                    {"prompt": "Do slides reference the lab appropriately?", "answer": "passed"},
                 ],
             }
         )
@@ -144,4 +144,45 @@ def test_qa_normalization_converts_pass_fail_answers_to_yes_no(monkeypatch) -> N
     qa = qa_module.generate_qa(_slides_stub(), _lab_stub(), _templates_stub(), curriculum, _research_stub())
 
     assert qa["status"] == "pass"
-    assert [item["answer"] for item in qa["checks"]] == ["Yes", "Yes"]
+    semantic_answers = {
+        item["prompt"]: item["answer"]
+        for item in qa["checks"]
+        if item["prompt"] in {
+            "Do slides align with curriculum/lab objectives?",
+            "Do slides reference the lab appropriately?",
+        }
+    }
+    assert semantic_answers == {
+        "Do slides align with curriculum/lab objectives?": "Yes",
+        "Do slides reference the lab appropriately?": "Yes",
+    }
+
+
+def test_qa_deterministic_authority_check_overrides_bad_model_answer(monkeypatch) -> None:
+    import training_factory.agents.qa as qa_module
+
+    def fake_generate_structured_output(*, normalize, **_kwargs):
+        return normalize(
+            {
+                "status": "pass",
+                "checks": [
+                    {"prompt": "Do slides align with curriculum/lab objectives?", "answer": "Yes"},
+                    {"prompt": "Do slides reference the lab appropriately?", "answer": "Yes"},
+                    {
+                        "prompt": "Does curriculum cite sufficiently authoritative sources (Tier A/B) for this topic?",
+                        "answer": "No",
+                    },
+                ],
+            }
+        )
+
+    monkeypatch.setattr(qa_module, "generate_structured_output", fake_generate_structured_output)
+
+    curriculum = {
+        "topic": "Power BI governance basics",
+        "references_used": ["src_001"],
+        "modules": [{"title": "M1", "duration_minutes": 10, "sources": ["src_001"]}],
+    }
+    qa = qa_module.generate_qa(_slides_stub(), _lab_stub(), _templates_stub(), curriculum, _research_stub())
+
+    assert _authority_answer(qa) == "Yes"

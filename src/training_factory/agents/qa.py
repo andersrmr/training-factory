@@ -7,6 +7,21 @@ from training_factory.utils.structured_output import generate_structured_output
 
 SCHEMA_PATH = Path(__file__).resolve().parents[3] / "schemas" / "qa.schema.json"
 
+_SLIDES_ALIGN_PROMPT = "Do slides align with curriculum/lab objectives?"
+_SLIDES_REFERENCE_LAB_PROMPT = "Do slides reference the lab appropriately?"
+_LAB_STRUCTURE_PROMPT = "Does lab exist and include steps/checkpoints?"
+_README_PROMPT = "Does templates include README.md?"
+_RUNBOOK_PROMPT = "Does templates include RUNBOOK.md?"
+_TEMPLATES_ALIGN_PROMPT = "Do templates align with slides and lab?"
+_CURRICULUM_REFS_PROMPT = "Does curriculum include references_used and are they valid research source IDs?"
+_MODULE_SOURCES_PROMPT = "Does each curriculum module include sources and are they valid research source IDs?"
+_AUTHORITY_PROMPT = "Does curriculum cite sufficiently authoritative sources (Tier A/B) for this topic?"
+_SEMANTIC_PROMPTS = {
+    _SLIDES_ALIGN_PROMPT,
+    _SLIDES_REFERENCE_LAB_PROMPT,
+    _TEMPLATES_ALIGN_PROMPT,
+}
+
 
 def _has_steps_and_checkpoints(lab: dict[str, Any]) -> bool:
     if isinstance(lab.get("steps"), list) and lab.get("steps") and isinstance(lab.get("checkpoints"), list) and lab.get("checkpoints"):
@@ -183,6 +198,121 @@ def _authority_usage_valid(curriculum: dict[str, Any], research: dict[str, Any])
     return tier_a_count >= 1 or tier_b_count >= 2
 
 
+def _build_deterministic_checks(
+    *,
+    lab_has_structure: bool,
+    slides_have_content: bool,
+    slides_reference_lab: bool,
+    has_readme: bool,
+    has_runbook: bool,
+    templates_align: bool,
+    has_valid_curriculum_refs: bool,
+    has_valid_module_sources: bool,
+    has_authoritative_citations: bool,
+) -> list[dict[str, str]]:
+    return [
+        {
+            "prompt": _SLIDES_ALIGN_PROMPT,
+            "answer": "Yes" if slides_have_content and lab_has_structure else "No",
+        },
+        {
+            "prompt": _SLIDES_REFERENCE_LAB_PROMPT,
+            "answer": "Yes" if slides_reference_lab else "No",
+        },
+        {
+            "prompt": _LAB_STRUCTURE_PROMPT,
+            "answer": "Yes" if lab_has_structure else "No",
+        },
+        {
+            "prompt": _README_PROMPT,
+            "answer": "Yes" if has_readme else "No",
+        },
+        {
+            "prompt": _RUNBOOK_PROMPT,
+            "answer": "Yes" if has_runbook else "No",
+        },
+        {
+            "prompt": _TEMPLATES_ALIGN_PROMPT,
+            "answer": "Yes" if templates_align else "No",
+        },
+        {
+            "prompt": _CURRICULUM_REFS_PROMPT,
+            "answer": "Yes" if has_valid_curriculum_refs else "No",
+        },
+        {
+            "prompt": _MODULE_SOURCES_PROMPT,
+            "answer": "Yes" if has_valid_module_sources else "No",
+        },
+        {
+            "prompt": _AUTHORITY_PROMPT,
+            "answer": "Yes" if has_authoritative_citations else "No",
+        },
+    ]
+
+
+def _fallback_semantic_checks(
+    *,
+    slides_have_content: bool,
+    lab_has_structure: bool,
+    slides_reference_lab: bool,
+    templates_align: bool,
+) -> list[dict[str, str]]:
+    return [
+        {
+            "prompt": _SLIDES_ALIGN_PROMPT,
+            "answer": "Yes" if slides_have_content and lab_has_structure else "No",
+        },
+        {
+            "prompt": _SLIDES_REFERENCE_LAB_PROMPT,
+            "answer": "Yes" if slides_reference_lab else "No",
+        },
+        {
+            "prompt": _TEMPLATES_ALIGN_PROMPT,
+            "answer": "Yes" if templates_align else "No",
+        },
+    ]
+
+
+def _normalize_model_checks(
+    payload: dict[str, Any],
+    fallback_checks: list[dict[str, str]],
+) -> dict[str, str]:
+    if "qa" in payload and isinstance(payload["qa"], dict):
+        payload = payload["qa"]
+
+    raw_checks = payload.get("checks", fallback_checks)
+    normalized_by_prompt = {
+        check["prompt"]: check["answer"] for check in fallback_checks if isinstance(check, dict)
+    }
+    if not isinstance(raw_checks, list):
+        return normalized_by_prompt
+
+    for item in raw_checks:
+        if not isinstance(item, dict):
+            continue
+        prompt = str(item.get("prompt", "")).strip()
+        if prompt not in _SEMANTIC_PROMPTS:
+            continue
+        answer = _normalize_check_answer(item.get("answer", ""))
+        if answer:
+            normalized_by_prompt[prompt] = answer
+    return normalized_by_prompt
+
+
+def _merge_checks(
+    deterministic_checks: list[dict[str, str]],
+    semantic_answers_by_prompt: dict[str, str],
+) -> list[dict[str, str]]:
+    merged: list[dict[str, str]] = []
+    for item in deterministic_checks:
+        prompt = str(item.get("prompt", "")).strip()
+        answer = str(item.get("answer", "")).strip()
+        if prompt in _SEMANTIC_PROMPTS:
+            answer = semantic_answers_by_prompt.get(prompt, answer) or answer
+        merged.append({"prompt": prompt, "answer": answer if answer in {"Yes", "No"} else "No"})
+    return merged
+
+
 def generate_qa(
     slides: dict[str, Any],
     lab: dict[str, Any],
@@ -201,121 +331,42 @@ def generate_qa(
     has_valid_module_sources = _module_sources_valid(curriculum, research_ids)
     has_authoritative_citations = _authority_usage_valid(curriculum, research)
 
-    checks = [
-        {
-            "prompt": "Do slides align with curriculum/lab objectives?",
-            "answer": "Yes" if slides_have_content and lab_has_structure else "No",
-        },
-        {
-            "prompt": "Do slides reference the lab appropriately?",
-            "answer": "Yes" if slides_reference_lab else "No",
-        },
-        {
-            "prompt": "Does lab exist and include steps/checkpoints?",
-            "answer": "Yes" if lab_has_structure else "No",
-        },
-        {
-            "prompt": "Does templates include README.md?",
-            "answer": "Yes" if has_readme else "No",
-        },
-        {
-            "prompt": "Does templates include RUNBOOK.md?",
-            "answer": "Yes" if has_runbook else "No",
-        },
-        {
-            "prompt": "Do templates align with slides and lab?",
-            "answer": "Yes" if templates_align else "No",
-        },
-        {
-            "prompt": "Does curriculum include references_used and are they valid research source IDs?",
-            "answer": "Yes" if has_valid_curriculum_refs else "No",
-        },
-        {
-            "prompt": "Does each curriculum module include sources and are they valid research source IDs?",
-            "answer": "Yes" if has_valid_module_sources else "No",
-        },
-        {
-            "prompt": "Does curriculum cite sufficiently authoritative sources (Tier A/B) for this topic?",
-            "answer": "Yes" if has_authoritative_citations else "No",
-        },
-    ]
-
-    status = "pass" if all(item["answer"] == "Yes" for item in checks) else "fail"
-    fallback = {"status": status, "checks": checks}
-    offline_templates_ok = _is_plausible_markdown(_template_content(templates, "README.md")) and _is_plausible_markdown(
-        _template_content(templates, "RUNBOOK.md")
+    deterministic_checks = _build_deterministic_checks(
+        lab_has_structure=lab_has_structure,
+        slides_have_content=slides_have_content,
+        slides_reference_lab=slides_reference_lab,
+        has_readme=has_readme,
+        has_runbook=has_runbook,
+        templates_align=templates_align,
+        has_valid_curriculum_refs=has_valid_curriculum_refs,
+        has_valid_module_sources=has_valid_module_sources,
+        has_authoritative_citations=has_authoritative_citations,
     )
-    offline_stub = {
-        "status": (
-            "pass"
-            if (
-                offline_templates_ok
-                and has_valid_curriculum_refs
-                and has_valid_module_sources
-                and has_authoritative_citations
-            )
-            else "fail"
-        ),
-        "checks": [
-            {
-                "prompt": "Do templates include non-empty plausible README.md content?",
-                "answer": "Yes" if _is_plausible_markdown(_template_content(templates, "README.md")) else "No",
-            },
-            {
-                "prompt": "Do templates include non-empty plausible RUNBOOK.md content?",
-                "answer": "Yes" if _is_plausible_markdown(_template_content(templates, "RUNBOOK.md")) else "No",
-            },
-            {
-                "prompt": "Does curriculum include references_used and are they valid research source IDs?",
-                "answer": "Yes" if has_valid_curriculum_refs else "No",
-            },
-            {
-                "prompt": "Does each curriculum module include sources and are they valid research source IDs?",
-                "answer": "Yes" if has_valid_module_sources else "No",
-            },
-            {
-                "prompt": "Does curriculum cite sufficiently authoritative sources (Tier A/B) for this topic?",
-                "answer": "Yes" if has_authoritative_citations else "No",
-            },
-        ],
-    }
+    fallback_semantic_checks = _fallback_semantic_checks(
+        slides_have_content=slides_have_content,
+        lab_has_structure=lab_has_structure,
+        slides_reference_lab=slides_reference_lab,
+        templates_align=templates_align,
+    )
+    fallback = {"status": "fail", "checks": deterministic_checks}
+    offline_stub = {"status": "fail", "checks": fallback_semantic_checks}
     prompt = (
         "Return JSON only. Do not include markdown fences, labels, or extra prose. "
         "Produce QA with keys status and checks. "
         "status must be pass or fail. checks is an array of {prompt, answer}. "
-        "Checks must include: "
+        "Return only these semantic checks: "
         "(1) slides align with curriculum/lab objectives using slide titles/bullets, "
         "(2) slides reference the lab appropriately at least conceptually, "
-        "(3) lab exists and has steps/checkpoints, "
-        "(4) templates includes README.md, "
-        "(5) templates includes RUNBOOK.md, "
-        "(6) templates align with slides and lab (README + RUNBOOK consistent), "
-        "(7) curriculum references_used exists and cites valid research source IDs, "
-        "(8) each curriculum module includes sources with valid research source IDs, "
-        "(9) curriculum cites sufficiently authoritative Tier A/B sources based on topic sensitivity. "
+        "(3) templates align with slides and lab (README + RUNBOOK consistent). "
+        "For each check, answer Yes or No. "
         f"Slides: {json.dumps(slides)}. Lab: {json.dumps(lab)}. Templates: {json.dumps(templates)}. "
         f"Curriculum: {json.dumps(curriculum)}. Research: {json.dumps(research)}"
     )
 
     def _normalize(payload: dict) -> dict:
-        if "qa" in payload and isinstance(payload["qa"], dict):
-            payload = payload["qa"]
-        checks = payload.get("checks", fallback["checks"])
-        raw_checks = checks if isinstance(checks, list) else fallback["checks"]
-        normalized_checks: list[dict[str, str]] = []
-        for item in raw_checks:
-            if not isinstance(item, dict):
-                continue
-            prompt = str(item.get("prompt", "")).strip()
-            answer = _normalize_check_answer(item.get("answer", ""))
-            normalized_checks.append({"prompt": prompt, "answer": answer})
-        if not normalized_checks:
-            normalized_checks = fallback["checks"]
-        status = "pass"
-        for item in normalized_checks:
-            if not isinstance(item, dict) or item.get("answer") != "Yes":
-                status = "fail"
-                break
+        semantic_answers_by_prompt = _normalize_model_checks(payload, fallback_semantic_checks)
+        normalized_checks = _merge_checks(deterministic_checks, semantic_answers_by_prompt)
+        status = "pass" if all(item["answer"] == "Yes" for item in normalized_checks) else "fail"
         return {
             "status": status,
             "checks": normalized_checks,
