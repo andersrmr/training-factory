@@ -159,23 +159,35 @@ def extract_sources_table(bundle: dict[str, Any]) -> Any:
 def render_bundle_summary(st: Any, bundle: dict[str, Any]) -> None:
     brief = _as_dict(bundle.get("brief"))
     curriculum = _as_dict(bundle.get("curriculum"))
+    research_qa = _as_dict(bundle.get("research_qa"))
     qa = _as_dict(bundle.get("qa"))
     execution = _as_dict(bundle.get("execution"))
 
     references_used = _as_list(brief.get("references_used"))
     key_guidelines = _as_list(brief.get("key_guidelines"))
     modules = _as_list(curriculum.get("modules"))
+    research_qa_checks = [check for check in _as_list(research_qa.get("checks")) if isinstance(check, dict)]
     qa_checks = [check for check in _as_list(qa.get("checks")) if isinstance(check, dict)]
 
     st.subheader("Parsed Summary")
     st.markdown(f"- `brief.references_used`: **{len(references_used)}**")
     st.markdown(f"- `brief.key_guidelines`: **{len(key_guidelines)}**")
     st.markdown(f"- `curriculum.modules`: **{len(modules)}**")
+    st.markdown(f"- `research_qa.status`: **{research_qa.get('status', '(missing)')}**")
     st.markdown(f"- `qa.status`: **{qa.get('status', '(missing)')}**")
     st.markdown(
         f"- `execution.research_revision_count`: **{int(execution.get('research_revision_count', 0) or 0)}**"
     )
     st.markdown(f"- `execution.qa_revision_count`: **{int(execution.get('qa_revision_count', 0) or 0)}**")
+
+    st.subheader("Research QA Checks")
+    if not research_qa_checks:
+        st.write("(missing)")
+    else:
+        for check in research_qa_checks:
+            prompt = str(check.get("prompt", "(missing)"))
+            answer = str(check.get("answer", "(missing)"))
+            st.markdown(f"- **{answer}** — {prompt}")
 
     st.subheader("QA Checks")
     if not qa_checks:
