@@ -425,3 +425,118 @@ def test_research_qa_fail_honors_custom_retry_limit(monkeypatch) -> None:
     assert calls["research"] == 3
     assert result["research_revision_count"] == 2
     assert result["packaging"]["research_qa"]["status"] == "pass"
+
+
+def test_research_retry_passes_failed_check_strategy_to_next_attempt(monkeypatch) -> None:
+    import training_factory.graph as graph_module
+
+    requests_seen: list[dict] = []
+
+    def research_fn(request: dict) -> dict:
+        requests_seen.append(request)
+        if len(requests_seen) == 1:
+            return {
+                "query_plan": {"queries": ["x"], "intent_keywords": ["governance"], "preferred_domains": []},
+                "sources": [
+                    {
+                        "id": "src_001",
+                        "title": "misc notes",
+                        "url": "https://example.com/a",
+                        "domain": "example.com",
+                        "publisher": "example.com",
+                        "doc_type": "",
+                        "authority_tier": "D",
+                        "score": 0.1,
+                        "snippets": [{"heading": "search_snippet", "text": "random text", "loc": "search"}],
+                    },
+                    {
+                        "id": "src_002",
+                        "title": "another note",
+                        "url": "https://example.com/b",
+                        "domain": "example.com",
+                        "publisher": "example.com",
+                        "doc_type": "",
+                        "authority_tier": "D",
+                        "score": 0.2,
+                        "snippets": [{"heading": "search_snippet", "text": "unrelated content", "loc": "search"}],
+                    },
+                    {
+                        "id": "src_003",
+                        "title": "third note",
+                        "url": "https://example.com/c",
+                        "domain": "example.com",
+                        "publisher": "example.com",
+                        "doc_type": "",
+                        "authority_tier": "D",
+                        "score": 0.3,
+                        "snippets": [{"heading": "search_snippet", "text": "more unrelated content", "loc": "search"}],
+                    },
+                ],
+                "context_pack": "x",
+            }
+        return {
+            "query_plan": {"queries": ["y"], "intent_keywords": ["governance"], "preferred_domains": []},
+            "sources": [
+                {
+                    "id": "src_001",
+                    "title": "Power BI guidance",
+                    "url": "https://learn.microsoft.com/power-bi/guidance/",
+                    "domain": "learn.microsoft.com",
+                    "publisher": "learn.microsoft.com",
+                    "doc_type": "guide",
+                    "authority_tier": "A",
+                    "score": 5.0,
+                    "snippets": [{"heading": "search_snippet", "text": "Power BI governance", "loc": "search"}],
+                },
+                {
+                    "id": "src_002",
+                    "title": "NIST controls",
+                    "url": "https://www.nist.gov/itl/ai-risk-management-framework",
+                    "domain": "nist.gov",
+                    "publisher": "nist.gov",
+                    "doc_type": "",
+                    "authority_tier": "A",
+                    "score": 4.8,
+                    "snippets": [{"heading": "search_snippet", "text": "risk controls guidance", "loc": "search"}],
+                },
+                {
+                    "id": "src_003",
+                    "title": "Implementation guide",
+                    "url": "https://learn.microsoft.com/power-bi/enterprise/powerbi-implementation-planning-alm",
+                    "domain": "learn.microsoft.com",
+                    "publisher": "learn.microsoft.com",
+                    "doc_type": "guide",
+                    "authority_tier": "A",
+                    "score": 4.7,
+                    "snippets": [{"heading": "search_snippet", "text": "implementation lifecycle", "loc": "search"}],
+                },
+            ],
+            "context_pack": "topic + sources",
+        }
+
+    monkeypatch.setattr(graph_module, "generate_research", research_fn)
+    monkeypatch.setattr(graph_module, "generate_brief", _brief)
+    monkeypatch.setattr(graph_module, "generate_curriculum", _curriculum)
+    monkeypatch.setattr(graph_module, "generate_slides", _slides)
+    monkeypatch.setattr(graph_module, "generate_lab", _lab)
+    monkeypatch.setattr(graph_module, "generate_templates", _templates)
+    monkeypatch.setattr(
+        graph_module,
+        "generate_qa",
+        lambda _slides, _lab, _templates, _curriculum, _research: {"status": "pass", "checks": []},
+    )
+    monkeypatch.setattr(graph_module, "validate_json", lambda *_args, **_kwargs: None)
+
+    graph = build_graph()
+    graph.invoke(TrainingState(request={"topic": "X", "audience": "Y"}).model_dump())
+
+    assert len(requests_seen) == 2
+    second_research_cfg = requests_seen[1]["research"]
+    retry_strategy = second_research_cfg["retry_strategy"]
+    assert sorted(retry_strategy["failed_checks"]) == [
+        "authority_threshold",
+        "domain_concentration",
+        "keyword_coverage",
+    ]
+    assert retry_strategy["attempt"] == 1
+    assert retry_strategy["excluded_domains"] == ["example.com"]

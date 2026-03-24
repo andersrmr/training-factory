@@ -84,6 +84,7 @@ Pipeline order: `research → research_qa → brief → curriculum → slides �
 Retry rules are bounded and deterministic:
 
 - `research_qa` retries up to a configurable limit; default is once
+- Research retries are adaptive: failed `research_qa` checks can trigger stronger authority-seeking queries, tighter topic-literal queries, and exclusion of overused non-Tier-A domains on the next attempt
 - `qa` retries once from `slides` if validation fails
 - No unbounded loops
 

@@ -47,6 +47,18 @@ _INTENT_KEYWORDS = [
 ]
 
 
+def _dedupe_keep_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    output: list[str] = []
+    for value in values:
+        normalized = value.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        output.append(normalized)
+    return output
+
+
 def _is_power_platform_topic(topic: str) -> bool:
     topic_lower = topic.lower()
     return any(
@@ -72,8 +84,51 @@ def _detect_product(topic: str) -> str:
     return "generic"
 
 
-def _build_query_plan(topic: str) -> dict[str, Any]:
+def _normalize_retry_strategy(research_cfg: dict[str, Any]) -> dict[str, Any]:
+    raw = research_cfg.get("retry_strategy", {})
+    if not isinstance(raw, dict):
+        return {"failed_checks": [], "attempt": 0, "excluded_domains": []}
+
+    failed_checks = [
+        str(item).strip()
+        for item in raw.get("failed_checks", [])
+        if isinstance(item, str) and str(item).strip()
+    ]
+    excluded_domains = [
+        str(item).strip().lower()
+        for item in raw.get("excluded_domains", [])
+        if isinstance(item, str) and str(item).strip()
+    ]
+    attempt_raw = raw.get("attempt", 0)
+    if isinstance(attempt_raw, bool):
+        attempt = int(attempt_raw)
+    elif isinstance(attempt_raw, int):
+        attempt = max(0, attempt_raw)
+    elif isinstance(attempt_raw, float):
+        attempt = max(0, int(attempt_raw))
+    elif isinstance(attempt_raw, str):
+        try:
+            attempt = max(0, int(attempt_raw.strip()))
+        except ValueError:
+            attempt = 0
+    else:
+        attempt = 0
+
+    return {
+        "failed_checks": failed_checks,
+        "attempt": attempt,
+        "excluded_domains": excluded_domains,
+    }
+
+
+def _build_query_plan(topic: str, retry_strategy: dict[str, Any] | None = None) -> dict[str, Any]:
     product = _detect_product(topic)
+    strategy = retry_strategy or {"failed_checks": [], "attempt": 0, "excluded_domains": []}
+    failed_checks = {
+        str(item).strip()
+        for item in strategy.get("failed_checks", [])
+        if isinstance(item, str) and str(item).strip()
+    }
     base_queries = [
         f"{topic} best practices",
         f"{topic} governance operating model",
@@ -96,12 +151,39 @@ def _build_query_plan(topic: str) -> dict[str, Any]:
             "enterprise chatgpt governance risk controls best practices",
             "site:nist.gov generative ai risk management",
         ]
-    queries = anchor_queries + base_queries
+    intent_keywords = list(_INTENT_KEYWORDS)
+    retry_queries: list[str] = []
     preferred_domains = ["learn.microsoft.com"] if _is_power_platform_topic(topic) else []
+
+    if "authority_threshold" in failed_checks:
+        retry_queries.extend(
+            [
+                f"site:learn.microsoft.com {topic} official guidance",
+                f"site:nist.gov {topic} governance guidance",
+            ]
+        )
+        preferred_domains = _dedupe_keep_order(
+            preferred_domains + ["learn.microsoft.com", "nist.gov", "owasp.org"]
+        )
+        intent_keywords.extend(["official guidance", "standards", "controls"])
+
+    if "keyword_coverage" in failed_checks:
+        retry_queries.extend(
+            [
+                f"\"{topic}\" overview",
+                f"\"{topic}\" implementation guide",
+            ]
+        )
+        intent_keywords.extend(sorted(_tokenize(topic)))
+
+    queries = _dedupe_keep_order(anchor_queries + retry_queries + base_queries)[:6]
+    if len(queries) < 4:
+        queries = _dedupe_keep_order(queries + base_queries)[:4]
+
     return {
         "queries": queries,
-        "intent_keywords": list(_INTENT_KEYWORDS),
-        "preferred_domains": preferred_domains,
+        "intent_keywords": _dedupe_keep_order(intent_keywords),
+        "preferred_domains": _dedupe_keep_order(preferred_domains),
         "product": product,
     }
 
@@ -167,14 +249,37 @@ def _score_result(
     intent_keywords: list[str],
     preferred_domains: list[str],
     product: str,
+    retry_strategy: dict[str, Any],
     result: SearchResult,
     domain: str,
 ) -> tuple[str, float]:
     tier = _authority_tier(domain)
     score = _TIER_SCORES[tier]
-    score += _keyword_overlap_score(topic, intent_keywords, result.title, result.snippet)
+    overlap_score = _keyword_overlap_score(topic, intent_keywords, result.title, result.snippet)
+    score += overlap_score
     if any(domain == d or domain.endswith(f".{d}") for d in preferred_domains):
         score += 1.0
+    failed_checks = {
+        str(item).strip()
+        for item in retry_strategy.get("failed_checks", [])
+        if isinstance(item, str) and str(item).strip()
+    }
+    excluded_domains = {
+        str(item).strip().lower()
+        for item in retry_strategy.get("excluded_domains", [])
+        if isinstance(item, str) and str(item).strip()
+    }
+    if "authority_threshold" in failed_checks:
+        if tier == "A":
+            score += 1.5
+        elif tier == "B":
+            score += 0.9
+        else:
+            score -= 0.4
+    if "keyword_coverage" in failed_checks:
+        score += overlap_score * 0.8
+    if "domain_concentration" in failed_checks and domain in excluded_domains and tier != "A":
+        score -= 3.0
     url_lower = result.url.lower()
     topic_lower = topic.lower()
     topic_has_alm_or_lifecycle = "alm" in topic_lower or "lifecycle" in topic_lower
@@ -227,9 +332,10 @@ def generate_research(request: dict[str, Any]) -> dict[str, Any]:
     research_cfg = request.get("research", {}) if isinstance(request.get("research"), dict) else {}
     web = bool(research_cfg.get("web", False))
     search_provider = str(research_cfg.get("search_provider", "fallback"))
+    retry_strategy = _normalize_retry_strategy(research_cfg)
     provider = get_search_provider(name=search_provider, web=web)
 
-    query_plan = _build_query_plan(topic)
+    query_plan = _build_query_plan(topic, retry_strategy)
     seen_urls: set[str] = set()
     candidates: list[dict[str, Any]] = []
     for query in query_plan["queries"]:
@@ -238,11 +344,20 @@ def generate_research(request: dict[str, Any]) -> dict[str, Any]:
                 continue
             seen_urls.add(item.url)
             domain = _extract_domain(item.url)
+            excluded_domains = {
+                str(item).strip().lower()
+                for item in retry_strategy.get("excluded_domains", [])
+                if isinstance(item, str) and str(item).strip()
+            }
+            if "domain_concentration" in retry_strategy.get("failed_checks", []) and domain in excluded_domains:
+                if _authority_tier(domain) != "A":
+                    continue
             authority_tier, score = _score_result(
                 topic=topic,
                 intent_keywords=query_plan["intent_keywords"],
                 preferred_domains=query_plan["preferred_domains"],
                 product=str(query_plan["product"]),
+                retry_strategy=retry_strategy,
                 result=item,
                 domain=domain,
             )

@@ -67,3 +67,66 @@ def test_power_bi_url_boost_ranks_above_power_platform(monkeypatch) -> None:
     assert urls.index("https://learn.microsoft.com/power-bi/guidance/") < urls.index(
         "https://learn.microsoft.com/power-platform/alm/overview-alm"
     )
+
+
+class _RetryAwareProvider:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    def search(self, query: str, *, num_results: int = 10) -> list[SearchResult]:
+        _ = num_results
+        self.queries.append(query)
+        return [
+            SearchResult(
+                title="Example blog post",
+                url="https://example.com/blog/post",
+                snippet="generic article",
+                source="example.com",
+                rank=1,
+            ),
+            SearchResult(
+                title="NIST governance guidance",
+                url="https://www.nist.gov/itl/ai-risk-management-framework",
+                snippet="governance controls implementation guide",
+                source="nist.gov",
+                rank=2,
+            ),
+            SearchResult(
+                title="Official Microsoft guidance",
+                url="https://learn.microsoft.com/power-bi/guidance/",
+                snippet="official guidance implementation guide",
+                source="learn.microsoft.com",
+                rank=3,
+            ),
+        ]
+
+
+def test_retry_strategy_adds_authority_queries_and_excludes_overused_domains(monkeypatch) -> None:
+    provider = _RetryAwareProvider()
+    monkeypatch.setattr(research_module, "get_search_provider", lambda name, web=False: provider)
+
+    payload = generate_research(
+        {
+            "topic": "GitHub version control basics",
+            "audience": "novice",
+            "research": {
+                "web": False,
+                "search_provider": "fallback",
+                "retry_strategy": {
+                    "failed_checks": [
+                        "authority_threshold",
+                        "keyword_coverage",
+                        "domain_concentration",
+                    ],
+                    "attempt": 1,
+                    "excluded_domains": ["example.com"],
+                },
+            },
+        }
+    )
+
+    queries = payload["query_plan"]["queries"]
+    assert any("site:nist.gov" in query for query in queries)
+    assert any("site:learn.microsoft.com" in query for query in queries)
+    assert any('"GitHub version control basics" overview' == query for query in queries)
+    assert all(source["domain"] != "example.com" for source in payload["sources"])

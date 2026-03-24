@@ -73,10 +73,70 @@ def _research_qa_node(state: GraphState) -> dict[str, Any]:
     return {"research_qa": research_qa}
 
 
+def _failed_research_qa_checks(research_qa: dict[str, Any]) -> list[str]:
+    checks = research_qa.get("checks", [])
+    if not isinstance(checks, list):
+        return []
+
+    failed: list[str] = []
+    for item in checks:
+        if not isinstance(item, dict) or item.get("answer") != "No":
+            continue
+        prompt = str(item.get("prompt", "")).strip()
+        if prompt == "Authority threshold met (>=1 Tier A or >=2 Tier B)":
+            failed.append("authority_threshold")
+        elif prompt == "Keyword coverage ratio is at least 0.5":
+            failed.append("keyword_coverage")
+        elif prompt == "No non-Tier-A domain has more than 2 sources":
+            failed.append("domain_concentration")
+    return failed
+
+
+def _overused_non_tier_a_domains(research: dict[str, Any]) -> list[str]:
+    sources = research.get("sources", [])
+    if not isinstance(sources, list):
+        return []
+
+    counts: dict[str, int] = {}
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        tier = str(source.get("authority_tier", "")).upper()
+        domain = str(source.get("domain", "")).strip().lower()
+        if not domain or tier == "A":
+            continue
+        counts[domain] = counts.get(domain, 0) + 1
+    return sorted(domain for domain, count in counts.items() if count > 2)
+
+
 def _research_retry_node(state: GraphState) -> dict[str, Any]:
     revision_count = int(state.get("research_revision_count", 0))
-    # Retry bookkeeping only: keep research/research_qa payloads unchanged here.
-    return {"research_revision_count": revision_count + 1}
+    request = state.get("request", {})
+    if not isinstance(request, dict):
+        request = {}
+    research_cfg = request.get("research", {})
+    if not isinstance(research_cfg, dict):
+        research_cfg = {}
+
+    failed_checks = _failed_research_qa_checks(state.get("research_qa", {}))
+    retry_strategy: dict[str, Any] = {
+        "failed_checks": failed_checks,
+        "attempt": revision_count + 1,
+    }
+    excluded_domains = _overused_non_tier_a_domains(state.get("research", {}))
+    if excluded_domains:
+        retry_strategy["excluded_domains"] = excluded_domains
+
+    return {
+        "research_revision_count": revision_count + 1,
+        "request": {
+            **request,
+            "research": {
+                **research_cfg,
+                "retry_strategy": retry_strategy,
+            },
+        },
+    }
 
 
 def _curriculum_node(state: GraphState) -> dict[str, Any]:
@@ -186,6 +246,10 @@ def _package_node(state: GraphState) -> dict[str, Any]:
     templates = _canonicalize_templates_for_bundle(state["templates"])
     packaging = {
         "request": state["request"],
+        "execution": {
+            "research_revision_count": int(state.get("research_revision_count", 0)),
+            "qa_revision_count": int(state.get("revision_count", 0)),
+        },
         "research": state["research"],
         "research_qa": state["research_qa"],
         "brief": state["brief"],

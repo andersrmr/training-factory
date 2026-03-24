@@ -3,6 +3,7 @@
   "type": "object",
   "required": [
     "request",
+    "execution",
     "research",
     "research_qa",
     "brief",
@@ -21,6 +22,15 @@
         "audience": {"type": "string"}
       },
       "additionalProperties": true
+    },
+    "execution": {
+      "type": "object",
+      "required": ["research_revision_count", "qa_revision_count"],
+      "properties": {
+        "research_revision_count": {"type": "integer", "minimum": 0},
+        "qa_revision_count": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
     },
     "brief": {
       "type": "object",

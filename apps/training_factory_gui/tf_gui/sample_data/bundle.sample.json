@@ -7,6 +7,10 @@
       "search_provider": "fallback"
     }
   },
+  "execution": {
+    "research_revision_count": 1,
+    "qa_revision_count": 0
+  },
   "research": {
     "query_plan": {
       "product": "power_bi",

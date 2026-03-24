@@ -84,6 +84,7 @@ def _compute_tier_counts_from_sources(sources: list[dict[str, Any]]) -> dict[str
 
 def extract_run_summary(bundle: dict[str, Any]) -> dict[str, Any]:
     request = _as_dict(bundle.get("request"))
+    execution = _as_dict(bundle.get("execution"))
     request_research = _as_dict(request.get("research"))
     brief = _as_dict(bundle.get("brief"))
     research = _as_dict(bundle.get("research"))
@@ -125,6 +126,8 @@ def extract_run_summary(bundle: dict[str, Any]) -> dict[str, Any]:
         "domain_count": domain_count,
         "search_provider": request_research.get("search_provider") or "(missing)",
         "web": bool(request_research.get("web", False)),
+        "research_retries_used": int(execution.get("research_revision_count", 0) or 0),
+        "qa_retries_used": int(execution.get("qa_revision_count", 0) or 0),
     }
 
 
@@ -157,6 +160,7 @@ def render_bundle_summary(st: Any, bundle: dict[str, Any]) -> None:
     brief = _as_dict(bundle.get("brief"))
     curriculum = _as_dict(bundle.get("curriculum"))
     qa = _as_dict(bundle.get("qa"))
+    execution = _as_dict(bundle.get("execution"))
 
     references_used = _as_list(brief.get("references_used"))
     key_guidelines = _as_list(brief.get("key_guidelines"))
@@ -168,6 +172,10 @@ def render_bundle_summary(st: Any, bundle: dict[str, Any]) -> None:
     st.markdown(f"- `brief.key_guidelines`: **{len(key_guidelines)}**")
     st.markdown(f"- `curriculum.modules`: **{len(modules)}**")
     st.markdown(f"- `qa.status`: **{qa.get('status', '(missing)')}**")
+    st.markdown(
+        f"- `execution.research_revision_count`: **{int(execution.get('research_revision_count', 0) or 0)}**"
+    )
+    st.markdown(f"- `execution.qa_revision_count`: **{int(execution.get('qa_revision_count', 0) or 0)}**")
 
     st.subheader("QA Checks")
     if not qa_checks:

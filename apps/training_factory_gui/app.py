@@ -122,6 +122,10 @@ def _render_run_summary(summary: dict[str, Any]) -> None:
     c7.metric("Search Provider", str(summary.get("search_provider", "(missing)")))
     c8.metric("Domain Count", int(summary.get("domain_count", 0)))
 
+    c9, c10 = st.columns(2)
+    c9.metric("Research Retries Used", int(summary.get("research_retries_used", 0)))
+    c10.metric("QA Retries Used", int(summary.get("qa_retries_used", 0)))
+
     tiers = summary.get("tier_counts", {}) if isinstance(summary.get("tier_counts"), dict) else {}
     st.markdown(
         "Tier counts: "
