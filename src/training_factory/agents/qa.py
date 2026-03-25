@@ -1,9 +1,5 @@
-import json
 from pathlib import Path
 from typing import Any
-
-from training_factory import llm
-from training_factory.utils.structured_output import generate_structured_output
 
 SCHEMA_PATH = Path(__file__).resolve().parents[3] / "schemas" / "qa.schema.json"
 
@@ -16,9 +12,6 @@ _TEMPLATES_ALIGN_PROMPT = "Do templates align with slides and lab?"
 _CURRICULUM_REFS_PROMPT = "Does curriculum include references_used and are they valid research source IDs?"
 _MODULE_SOURCES_PROMPT = "Does each curriculum module include sources and are they valid research source IDs?"
 _AUTHORITY_PROMPT = "Does curriculum cite sufficiently authoritative sources (Tier A/B) for this topic?"
-_SEMANTIC_PROMPTS = {
-    _SLIDES_ALIGN_PROMPT,
-}
 
 
 def _has_steps_and_checkpoints(lab: dict[str, Any]) -> bool:
@@ -70,6 +63,51 @@ def _slide_text(slides: dict[str, Any]) -> str:
     return " ".join(parts).strip()
 
 
+def _meaningful_tokens(text: str) -> set[str]:
+    normalized = "".join(ch.lower() if ch.isalnum() else " " for ch in text)
+    return {token for token in normalized.split() if len(token) > 3}
+
+
+def _slides_align_with_curriculum(slides: dict[str, Any], curriculum: dict[str, Any]) -> bool:
+    deck = slides.get("deck")
+    modules = curriculum.get("modules")
+    if not isinstance(deck, list) or not deck:
+        return False
+    if not isinstance(modules, list) or not modules:
+        return False
+    if len(deck) < len(modules):
+        return False
+
+    for module, slide in zip(modules, deck):
+        if not isinstance(module, dict) or not isinstance(slide, dict):
+            return False
+
+        module_title = str(module.get("title", "")).strip()
+        slide_title = str(slide.get("title", "")).strip()
+        bullets = slide.get("bullets")
+        if not module_title or not slide_title or not isinstance(bullets, list) or not bullets:
+            return False
+
+        module_tokens = _meaningful_tokens(module_title)
+        slide_title_tokens = _meaningful_tokens(slide_title)
+        slide_text_tokens = _meaningful_tokens(
+            " ".join(
+                [slide_title]
+                + [item for item in bullets if isinstance(item, str)]
+            )
+        )
+        if not module_tokens:
+            return False
+
+        title_overlap = module_tokens & slide_title_tokens
+        text_overlap = module_tokens & slide_text_tokens
+        min_overlap = 1 if len(module_tokens) == 1 else 2
+        if len(title_overlap) < min_overlap or len(text_overlap) < min_overlap:
+            return False
+
+    return True
+
+
 def _slides_reference_lab(slides: dict[str, Any]) -> bool:
     text = _slide_text(slides).lower()
     if not text:
@@ -115,15 +153,6 @@ def _templates_align_with_materials(slides: dict[str, Any], lab: dict[str, Any],
 def _is_plausible_markdown(text: str) -> bool:
     stripped = text.strip()
     return len(stripped) >= 20 and ("\n" in stripped or stripped.startswith("#"))
-
-
-def _normalize_check_answer(value: Any) -> str:
-    text = str(value).strip().lower()
-    if text in {"yes", "pass", "passed", "true"}:
-        return "Yes"
-    if text in {"no", "fail", "failed", "false"}:
-        return "No"
-    return ""
 
 
 def _research_ids(research: dict[str, Any]) -> set[str]:
@@ -266,59 +295,6 @@ def _build_deterministic_checks(
     ]
 
 
-def _fallback_semantic_checks(
-    *,
-    slides_have_content: bool,
-    lab_has_structure: bool,
-) -> list[dict[str, str]]:
-    return [
-        {
-            "prompt": _SLIDES_ALIGN_PROMPT,
-            "answer": "Yes" if slides_have_content and lab_has_structure else "No",
-        },
-    ]
-
-
-def _normalize_model_checks(
-    payload: dict[str, Any],
-    fallback_checks: list[dict[str, str]],
-) -> dict[str, str]:
-    if "qa" in payload and isinstance(payload["qa"], dict):
-        payload = payload["qa"]
-
-    raw_checks = payload.get("checks", fallback_checks)
-    normalized_by_prompt = {
-        check["prompt"]: check["answer"] for check in fallback_checks if isinstance(check, dict)
-    }
-    if not isinstance(raw_checks, list):
-        return normalized_by_prompt
-
-    for item in raw_checks:
-        if not isinstance(item, dict):
-            continue
-        prompt = str(item.get("prompt", "")).strip()
-        if prompt not in _SEMANTIC_PROMPTS:
-            continue
-        answer = _normalize_check_answer(item.get("answer", ""))
-        if answer:
-            normalized_by_prompt[prompt] = answer
-    return normalized_by_prompt
-
-
-def _merge_checks(
-    deterministic_checks: list[dict[str, str]],
-    semantic_answers_by_prompt: dict[str, str],
-) -> list[dict[str, str]]:
-    merged: list[dict[str, str]] = []
-    for item in deterministic_checks:
-        prompt = str(item.get("prompt", "")).strip()
-        answer = str(item.get("answer", "")).strip()
-        if prompt in _SEMANTIC_PROMPTS:
-            answer = semantic_answers_by_prompt.get(prompt, answer) or answer
-        merged.append({"prompt": prompt, "answer": answer if answer in {"Yes", "No"} else "No"})
-    return merged
-
-
 def generate_qa(
     slides: dict[str, Any],
     lab: dict[str, Any],
@@ -327,7 +303,8 @@ def generate_qa(
     research: dict[str, Any],
 ) -> dict[str, Any]:
     lab_has_structure = _has_steps_and_checkpoints(lab)
-    slides_have_content = bool(_slide_text(slides))
+    slides_have_content = _slide_text(slides)
+    slides_align = _slides_align_with_curriculum(slides, curriculum)
     slides_reference_lab = _slides_reference_lab(slides)
     has_readme = bool(_template_content(templates, "README.md"))
     has_runbook = bool(_template_content(templates, "RUNBOOK.md"))
@@ -339,7 +316,7 @@ def generate_qa(
 
     deterministic_checks = _build_deterministic_checks(
         lab_has_structure=lab_has_structure,
-        slides_have_content=slides_have_content,
+        slides_have_content=slides_align,
         slides_reference_lab=slides_reference_lab,
         has_readme=has_readme,
         has_runbook=has_runbook,
@@ -348,36 +325,5 @@ def generate_qa(
         has_valid_module_sources=has_valid_module_sources,
         has_authoritative_citations=has_authoritative_citations,
     )
-    fallback_semantic_checks = _fallback_semantic_checks(
-        slides_have_content=slides_have_content,
-        lab_has_structure=lab_has_structure,
-    )
-    fallback = {"status": "fail", "checks": deterministic_checks}
-    offline_stub = {"status": "fail", "checks": fallback_semantic_checks}
-    prompt = (
-        "Return JSON only. Do not include markdown fences, labels, or extra prose. "
-        "Produce QA with keys status and checks. "
-        "status must be pass or fail. checks is an array of {prompt, answer}. "
-        "Return only these semantic checks: "
-        "(1) slides align with curriculum/lab objectives using slide titles/bullets. "
-        "For each check, answer Yes or No. "
-        f"Slides: {json.dumps(slides)}. Lab: {json.dumps(lab)}. Templates: {json.dumps(templates)}. "
-        f"Curriculum: {json.dumps(curriculum)}. Research: {json.dumps(research)}"
-    )
-
-    def _normalize(payload: dict) -> dict:
-        semantic_answers_by_prompt = _normalize_model_checks(payload, fallback_semantic_checks)
-        normalized_checks = _merge_checks(deterministic_checks, semantic_answers_by_prompt)
-        status = "pass" if all(item["answer"] == "Yes" for item in normalized_checks) else "fail"
-        return {
-            "status": status,
-            "checks": normalized_checks,
-        }
-
-    return generate_structured_output(
-        model=llm,
-        prompt=prompt,
-        schema_path=SCHEMA_PATH,
-        normalize=_normalize,
-        offline_stub=offline_stub,
-    )
+    status = "pass" if all(item["answer"] == "Yes" for item in deterministic_checks) else "fail"
+    return {"status": status, "checks": deterministic_checks}

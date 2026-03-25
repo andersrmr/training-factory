@@ -105,91 +105,45 @@ def test_qa_authority_check_non_sensitive_topic_passes_with_two_tier_b() -> None
     assert _authority_answer(qa) == "Yes"
 
 
-def test_qa_normalization_forces_fail_when_any_check_is_no(monkeypatch) -> None:
-    import training_factory.agents.qa as qa_module
-
-    def fake_generate_structured_output(*, normalize, **_kwargs):
-        return normalize(
-            {
-                "status": "pass",
-                "checks": [
-                    {"prompt": "Do slides align with curriculum/lab objectives?", "answer": "Yes"},
-                ],
-            }
-        )
-
-    monkeypatch.setattr(qa_module, "generate_structured_output", fake_generate_structured_output)
-
+def test_qa_status_is_pass_when_all_deterministic_checks_pass() -> None:
     curriculum = {
-        "topic": "Power BI basics",
+        "topic": "Lab setup and governance",
         "references_used": ["src_001"],
-        "modules": [{"title": "M1", "duration_minutes": 10, "sources": ["src_001"]}],
+        "modules": [{"title": "Lab setup and governance", "duration_minutes": 10, "sources": ["src_001"]}],
     }
-    qa = qa_module.generate_qa(_slides_stub(), _lab_stub(), _aligned_templates_stub(), curriculum, _research_stub())
+    qa = generate_qa(_slides_stub(), _lab_stub(), _aligned_templates_stub(), curriculum, _research_stub())
 
     assert qa["status"] == "pass"
 
 
-def test_qa_normalization_converts_pass_fail_answers_to_yes_no(monkeypatch) -> None:
-    import training_factory.agents.qa as qa_module
-
-    def fake_generate_structured_output(*, normalize, **_kwargs):
-        return normalize(
-            {
-                "status": "pass",
-                "checks": [
-                    {"prompt": "Do slides align with curriculum/lab objectives?", "answer": "pass"},
-                ],
-            }
-        )
-
-    monkeypatch.setattr(qa_module, "generate_structured_output", fake_generate_structured_output)
-
-    curriculum = {
-        "topic": "Power BI basics",
-        "references_used": ["src_002", "src_004"],
-        "modules": [{"title": "M1", "duration_minutes": 10, "sources": ["src_002"]}],
-    }
-    qa = qa_module.generate_qa(_slides_stub(), _lab_stub(), _aligned_templates_stub(), curriculum, _research_stub())
-
-    assert qa["status"] == "pass"
-    semantic_answers = {
-        item["prompt"]: item["answer"]
-        for item in qa["checks"]
-        if item["prompt"] == "Do slides align with curriculum/lab objectives?"
-    }
-    assert semantic_answers == {
-        "Do slides align with curriculum/lab objectives?": "Yes",
-    }
-
-
-def test_qa_deterministic_authority_check_overrides_bad_model_answer(monkeypatch) -> None:
-    import training_factory.agents.qa as qa_module
-
-    def fake_generate_structured_output(*, normalize, **_kwargs):
-        return normalize(
-            {
-                "status": "pass",
-                "checks": [
-                    {"prompt": "Do slides align with curriculum/lab objectives?", "answer": "Yes"},
-                    {
-                        "prompt": "Does curriculum cite sufficiently authoritative sources (Tier A/B) for this topic?",
-                        "answer": "No",
-                    },
-                ],
-            }
-        )
-
-    monkeypatch.setattr(qa_module, "generate_structured_output", fake_generate_structured_output)
-
+def test_slides_alignment_requires_overlap_with_curriculum_module_titles() -> None:
     curriculum = {
         "topic": "Power BI governance basics",
         "references_used": ["src_001"],
-        "modules": [{"title": "M1", "duration_minutes": 10, "sources": ["src_001"]}],
+        "modules": [{"title": "Lab setup and governance", "duration_minutes": 10, "sources": ["src_001"]}],
     }
-    qa = qa_module.generate_qa(_slides_stub(), _lab_stub(), _templates_stub(), curriculum, _research_stub())
+    qa = generate_qa(_slides_stub(), _lab_stub(), _aligned_templates_stub(), curriculum, _research_stub())
 
-    assert _authority_answer(qa) == "Yes"
+    answers = {item["prompt"]: item["answer"] for item in qa["checks"]}
+    assert answers["Do slides align with curriculum/lab objectives?"] == "Yes"
+
+
+def test_slides_alignment_fails_without_curriculum_title_overlap() -> None:
+    curriculum = {
+        "topic": "Power BI lifecycle management",
+        "references_used": ["src_001"],
+        "modules": [
+            {
+                "title": "Lifecycle deployment governance",
+                "duration_minutes": 10,
+                "sources": ["src_001"],
+            }
+        ],
+    }
+    qa = generate_qa(_slides_stub(), _lab_stub(), _aligned_templates_stub(), curriculum, _research_stub())
+
+    answers = {item["prompt"]: item["answer"] for item in qa["checks"]}
+    assert answers["Do slides align with curriculum/lab objectives?"] == "No"
 
 
 def test_templates_alignment_requires_slide_and_lab_language_with_title_overlap() -> None:
