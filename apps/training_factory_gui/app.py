@@ -230,6 +230,8 @@ def _render_run_log_tab(last_run_result: dict[str, Any] | None) -> None:
 
 def _render_bundle_actions(bundle: dict[str, Any], default_save_path: str) -> None:
     bundle_json = json.dumps(bundle, indent=2) + "\n"
+    st.subheader("Bundle Actions")
+    st.caption("Download the currently loaded bundle from the browser.")
     st.download_button(
         label="Download bundle.json",
         data=bundle_json,
@@ -237,6 +239,8 @@ def _render_bundle_actions(bundle: dict[str, Any], default_save_path: str) -> No
         mime="application/json",
     )
 
+    st.subheader("Save to Disk")
+    st.caption("Write the currently loaded bundle to a local file path.")
     save_path = st.text_input("save_bundle_path", value=default_save_path)
     st.session_state["save_bundle_path"] = save_path
     if st.button("Save current bundle to disk"):
@@ -513,7 +517,6 @@ def main() -> None:
             st.info("Cleared loaded bundle.")
 
         if isinstance(st.session_state.get("bundle"), dict):
-            st.header("Bundle Actions")
             _render_bundle_actions(
                 st.session_state["bundle"],
                 str(state.get("save_bundle_path") or f"{out_dir}/{mode}/bundle.json"),
