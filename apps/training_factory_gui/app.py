@@ -132,6 +132,112 @@ def _render_secret_notice(*, mode: str) -> None:
     st.warning(message)
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _compute_runtime_status(
+    *,
+    mode: str,
+    execution_mode: str,
+    result: dict[str, Any] | None,
+    bundle: dict[str, Any] | None,
+) -> dict[str, Any]:
+    settings = get_settings()
+    missing_openai = not bool(settings.openai_api_key)
+    missing_serpapi = mode == "M3" and not bool(settings.serpapi_api_key)
+    requested_provider = "fallback" if mode in {"M1", "M2"} else "serpapi"
+
+    bundle_request = _as_dict(_as_dict(bundle).get("request"))
+    bundle_research = _as_dict(bundle_request.get("research"))
+    bundle_search_provider = str(bundle_research.get("search_provider", "")).strip().lower()
+    effective_search_provider = bundle_search_provider or requested_provider
+    if mode == "M3" and missing_serpapi:
+        effective_search_provider = "fallback"
+
+    if mode == "M1":
+        llm_behavior = "Offline mode was active, so stub outputs were used instead of model calls."
+    elif missing_openai:
+        llm_behavior = "OPENAI_API_KEY was missing, so model-backed generation fell back to stub outputs."
+    else:
+        llm_behavior = f"OpenAI model-backed generation was enabled with {settings.openai_model}."
+
+    reasons: list[str] = []
+    if mode == "M1":
+        reasons.append("M1 intentionally disables live model usage and runs offline.")
+    if missing_openai and mode != "M1":
+        reasons.append("OPENAI_API_KEY was missing, so model-backed generation and semantic QA did not run normally.")
+    if missing_serpapi:
+        reasons.append("SERPAPI_API_KEY was missing, so requested M3 search used the fallback provider instead.")
+
+    run_ok = bool(_as_dict(result).get("ok")) if isinstance(result, dict) else False
+    degraded = bool(reasons)
+    if run_ok and degraded:
+        headline = "Run succeeded in degraded mode."
+        tone = "warning"
+    elif run_ok:
+        headline = "Run succeeded with the requested configuration."
+        tone = "success"
+    elif degraded:
+        headline = "Run failed after degrading from the requested configuration."
+        tone = "error"
+    else:
+        headline = "Run failed."
+        tone = "error"
+
+    return {
+        "headline": headline,
+        "tone": tone,
+        "mode": mode,
+        "execution_mode": execution_mode,
+        "requested_search_provider": requested_provider,
+        "effective_search_provider": effective_search_provider,
+        "llm_behavior": llm_behavior,
+        "missing_secrets": [
+            secret
+            for secret, missing in (
+                ("OPENAI_API_KEY", missing_openai),
+                ("SERPAPI_API_KEY", missing_serpapi),
+            )
+            if missing
+        ],
+        "reasons": reasons,
+    }
+
+
+def _render_runtime_status(status: dict[str, Any] | None) -> None:
+    if not isinstance(status, dict):
+        return
+
+    tone = str(status.get("tone", "info"))
+    headline = str(status.get("headline", "Runtime status unavailable."))
+    if tone == "success":
+        st.success(headline)
+    elif tone == "warning":
+        st.warning(headline)
+    elif tone == "error":
+        st.error(headline)
+    else:
+        st.info(headline)
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Mode", str(status.get("mode", "(missing)")))
+    c2.metric("Execution", str(status.get("execution_mode", "(missing)")))
+    c3.metric("Requested Search", str(status.get("requested_search_provider", "(missing)")))
+    c4.metric("Effective Search", str(status.get("effective_search_provider", "(missing)")))
+
+    st.caption(str(status.get("llm_behavior", "")))
+
+    missing_secrets = status.get("missing_secrets", [])
+    if isinstance(missing_secrets, list) and missing_secrets:
+        st.write("Missing secrets:", ", ".join(str(item) for item in missing_secrets))
+
+    reasons = status.get("reasons", [])
+    if isinstance(reasons, list) and reasons:
+        for reason in reasons:
+            st.markdown(f"- {reason}")
+
+
 def _render_run_summary(summary: dict[str, Any]) -> None:
     st.subheader("Run Summary")
     c1, c2, c3, c4 = st.columns(4)
@@ -192,7 +298,12 @@ def _render_raw_json_tab(bundle: dict[str, Any]) -> None:
     st.json(bundle)
 
 
-def _render_run_log_tab(last_run_result: dict[str, Any] | None) -> None:
+def _render_run_log_tab(
+    last_run_result: dict[str, Any] | None,
+    runtime_status: dict[str, Any] | None = None,
+) -> None:
+    _render_runtime_status(runtime_status)
+
     if not isinstance(last_run_result, dict):
         st.info("No run executed yet.")
         return
@@ -484,6 +595,14 @@ def main() -> None:
                 else:
                     st.error("Pipeline run failed. See Run Log tab for details.")
 
+            status_bundle = st.session_state.get("bundle")
+            st.session_state["last_runtime_status"] = _compute_runtime_status(
+                mode=mode,
+                execution_mode=execution_mode_value,
+                result=result,
+                bundle=status_bundle if isinstance(status_bundle, dict) else None,
+            )
+
         if isinstance(validate_result, dict):
             with st.expander("Validation result", expanded=False):
                 st.write(validate_result)
@@ -530,15 +649,21 @@ def main() -> None:
         if isinstance(last_run_result, dict):
             run_ok = bool(last_run_result.get("ok"))
             st.write(f"last run: {'ok' if run_ok else 'fail'}")
+        last_runtime_status = st.session_state.get("last_runtime_status")
+        if isinstance(last_runtime_status, dict):
+            st.write(str(last_runtime_status.get("headline", "runtime status unavailable")))
 
     bundle = st.session_state.get("bundle")
     last_run_result = st.session_state.get("last_run_result")
+    last_runtime_status = st.session_state.get("last_runtime_status")
 
     if isinstance(bundle, dict):
         summary = extract_run_summary(bundle)
         _render_run_summary(summary)
     else:
         st.info("Load a bundle from the sidebar to view parsed results.")
+
+    _render_runtime_status(last_runtime_status if isinstance(last_runtime_status, dict) else None)
 
     tab_summary, tab_sources, tab_json, tab_run_log, tab_about = st.tabs(
         ["Bundle Summary", "Research Sources", "Raw JSON", "Run Log", "About / Architecture"]
@@ -569,7 +694,10 @@ def main() -> None:
             st.write("(missing)")
 
     with tab_run_log:
-        _render_run_log_tab(last_run_result if isinstance(last_run_result, dict) else None)
+        _render_run_log_tab(
+            last_run_result if isinstance(last_run_result, dict) else None,
+            last_runtime_status if isinstance(last_runtime_status, dict) else None,
+        )
 
     with tab_about:
         _render_about_tab()

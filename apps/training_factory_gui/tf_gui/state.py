@@ -32,6 +32,8 @@ def init_state_defaults() -> None:
         st.session_state["out_dir"] = _DEFAULT_OUT_DIR
     if "last_run_result" not in st.session_state:
         st.session_state["last_run_result"] = None
+    if "last_runtime_status" not in st.session_state:
+        st.session_state["last_runtime_status"] = None
     if "timeout_s" not in st.session_state:
         st.session_state["timeout_s"] = 600
     if "research_max_retries" not in st.session_state:
@@ -56,6 +58,7 @@ def get_state() -> dict[str, object]:
         "run_cwd": st.session_state.get("run_cwd"),
         "out_dir": st.session_state.get("out_dir"),
         "last_run_result": st.session_state.get("last_run_result"),
+        "last_runtime_status": st.session_state.get("last_runtime_status"),
         "timeout_s": st.session_state.get("timeout_s"),
         "research_max_retries": st.session_state.get("research_max_retries"),
         "qa_max_retries": st.session_state.get("qa_max_retries"),
@@ -67,5 +70,6 @@ def get_state() -> dict[str, object]:
 def clear_bundle(*, clear_last_run_result: bool = False) -> None:
     st.session_state["bundle"] = None
     st.session_state["last_loaded_at"] = None
+    st.session_state["last_runtime_status"] = None
     if clear_last_run_result:
         st.session_state["last_run_result"] = None
