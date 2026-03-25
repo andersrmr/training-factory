@@ -143,6 +143,7 @@ Capabilities:
 
 - Topic / audience / mode selection
 - Configurable `research_max_retries`
+- Configurable `qa_max_retries`
 - Deterministic CLI execution
 - Mode-scoped outputs (out_dir/<MODE>/bundle.json)
 - Run history + manifests
@@ -253,18 +254,27 @@ All artifacts are JSON schema validated.
 
 ```code
 training-factory/
+├─ apps/
+│  └─ training_factory_gui/
+│     ├─ app.py
+│     └─ tf_gui/
+├─ docs/
+├─ out/
+├─ plans/
+├─ schemas/
+├─ scripts/
 ├─ src/training_factory/
 │  ├─ agents/
 │  ├─ research/
 │  ├─ graph.py
 │  ├─ state.py
 │  ├─ cli.py
+│  ├─ llm.py
+│  ├─ settings.py
 │  └─ utils/
-├─ schemas/
 ├─ tests/
-├─ apps/
-│  └─ training_factory_gui/
-└─ out/
+├─ pyproject.toml
+└─ README.md
 ```
 
 ## Technical Deep Dive (For Engineers)
@@ -302,8 +312,5 @@ Tradeoff: Explainability and reproducibility over fuzzy semantic recall.
 - Measurable evaluation over anecdotal quality
 
 ### Status
-
-Phase 2: Research layer maturity complete  
-Phase 3: GUI and execution framework complete
 
 The system is architecturally stable and reproducible.
