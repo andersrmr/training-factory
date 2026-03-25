@@ -152,6 +152,15 @@ Capabilities:
 
 The GUI exposes system behavior transparently without hiding CLI execution.
 
+### Using the Public App
+
+1. Enter a topic, choose an audience, pick a research mode, and click `Run pipeline`.
+2. Start with `M1 offline` if you want the most deterministic path, use `M2` for web research with the fallback provider, and use `M3` for expanded web research with SerpAPI when available.
+3. After each run, read the runtime-status panel first. It tells you whether the run used the requested configuration or succeeded in degraded mode.
+4. If required secrets such as `OPENAI_API_KEY` or `SERPAPI_API_KEY` are missing, the app explains what changed, such as using stub generation or falling back from SerpAPI search.
+
+The `Run Log` tab includes the same runtime-status summary alongside the resolved command, `stdout`, and `stderr`.
+
 ## CLI Usage
 
 Generate a bundle (M1 offline, default retry limit):
