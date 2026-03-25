@@ -13,8 +13,34 @@ def _module_bullets(title: str) -> list[str]:
         f"Learning objective: explain and apply core ideas from {title}.",
         f"Concept 1: key terminology and foundational principles for {title}.",
         f"Concept 2: workflow, decisions, and tradeoffs when using {title}.",
-        f"Practical example: a short real-world use case that demonstrates {title} in action.",
+        f"Hands-on lab checkpoint: complete a short exercise for {title} and verify the expected outcome.",
     ]
+
+
+def _has_lab_language(text: str) -> bool:
+    lowered = text.lower()
+    return any(token in lowered for token in ("lab", "exercise", "hands-on", "checkpoint"))
+
+
+def _normalize_slide_item(item: Any, index: int) -> dict[str, Any]:
+    title = f"Module {index}"
+    if isinstance(item, dict) and isinstance(item.get("title"), str) and item.get("title", "").strip():
+        title = item["title"].strip()
+
+    bullets = _module_bullets(title)
+    if isinstance(item, dict) and isinstance(item.get("bullets"), list):
+        candidate_bullets = [bullet.strip() for bullet in item["bullets"] if isinstance(bullet, str) and bullet.strip()]
+        if candidate_bullets:
+            bullets = candidate_bullets[:4]
+
+    while len(bullets) < 4:
+        bullets.append(_module_bullets(title)[len(bullets)])
+
+    combined_text = " ".join([title] + bullets)
+    if not _has_lab_language(combined_text):
+        bullets[-1] = f"Hands-on lab checkpoint: complete a short exercise for {title} and verify the expected outcome."
+
+    return {"slide": index, "title": title, "bullets": bullets[:4]}
 
 
 def generate_slides(curriculum: dict[str, Any], *, retry_strategy: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -55,7 +81,7 @@ def generate_slides(curriculum: dict[str, Any], *, retry_strategy: dict[str, Any
         "(1) one learning objective specific to the module title, "
         "(2) one concrete concept, "
         "(3) one concrete concept, "
-        "(4) one short practical example or use case. "
+        "(4) one hands-on lab, exercise, or checkpoint reference tied to the module title. "
         "Do not use placeholders like 'Learning objective', 'Core concept', or 'Example'; "
         "derive all bullet text from the module title. "
         f"{retry_guidance} "
@@ -65,7 +91,11 @@ def generate_slides(curriculum: dict[str, Any], *, retry_strategy: dict[str, Any
     def _normalize(payload: dict) -> dict:
         if "slides" in payload and isinstance(payload["slides"], dict):
             payload = payload["slides"]
-        return {"deck": payload.get("deck", fallback["deck"])}
+        deck_payload = payload.get("deck", fallback["deck"])
+        if not isinstance(deck_payload, list):
+            deck_payload = fallback["deck"]
+        normalized_deck = [_normalize_slide_item(item, index) for index, item in enumerate(deck_payload, start=1)]
+        return {"deck": normalized_deck or fallback["deck"]}
 
     return generate_structured_output(
         model=llm,

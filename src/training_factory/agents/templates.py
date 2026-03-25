@@ -16,16 +16,35 @@ def _schema_mode() -> str:
     return "structured"
 
 
-def _legacy_fallback(slide_count: int) -> dict[str, str]:
+def _slide_titles(slides: dict[str, Any]) -> list[str]:
+    deck = slides.get("deck", [])
+    if not isinstance(deck, list):
+        return []
+
+    titles: list[str] = []
+    for item in deck:
+        if isinstance(item, dict) and isinstance(item.get("title"), str) and item.get("title", "").strip():
+            titles.append(item["title"].strip())
+    return titles
+
+
+def _joined_slide_titles(slides: dict[str, Any]) -> str:
+    titles = _slide_titles(slides)
+    return ", ".join(titles) if titles else "the module topics"
+
+
+def _legacy_fallback(slides: dict[str, Any]) -> dict[str, str]:
+    title_text = _joined_slide_titles(slides)
     return {
         "README.md": (
             "# Training Bundle\n\n"
-            f"This training bundle contains {slide_count} slide(s) and related assets.\n"
+            f"This training bundle uses the slide deck and module flow for {title_text}. "
+            "Learners should complete the hands-on lab exercise and checkpoint review for each module.\n"
         ),
         "RUNBOOK.md": (
             "# Runbook\n\n"
-            "1. Review the brief and curriculum.\n"
-            "2. Walk through slides and labs.\n"
+            f"1. Review the slide deck for {title_text} and confirm the module sequence.\n"
+            "2. Walk through the hands-on lab exercise and checkpoint review for each module.\n"
             "3. Use QA checks to validate delivery readiness.\n"
         ),
     }
@@ -89,9 +108,35 @@ def _structured_to_legacy(payload: dict[str, Any], fallback: dict[str, str]) -> 
     return {"README.md": readme_content, "RUNBOOK.md": runbook_content}
 
 
+def _ensure_template_alignment(
+    content: str,
+    *,
+    fallback_content: str,
+    slide_titles: list[str],
+    document_name: str,
+) -> str:
+    text = content.strip() if isinstance(content, str) else ""
+    if not text:
+        text = fallback_content
+
+    lowered = text.lower()
+    has_lab_ref = any(token in lowered for token in ("lab", "exercise", "checkpoint"))
+    has_slide_ref = any(token in lowered for token in ("slide", "deck", "module", "lesson"))
+    has_title_ref = any(title.lower() in lowered for title in slide_titles if title.strip())
+
+    if has_lab_ref and has_slide_ref and (has_title_ref or not slide_titles):
+        return text
+
+    title_text = ", ".join(slide_titles) if slide_titles else "the module topics"
+    appendix = (
+        f"\n\n{document_name} alignment notes: use the slide deck and module flow for {title_text}. "
+        "Include the hands-on lab exercise and checkpoint review during delivery."
+    )
+    return f"{text}{appendix}".strip()
+
+
 def generate_templates(slides: dict[str, Any], *, retry_strategy: dict[str, Any] | None = None) -> dict[str, Any]:
-    deck = slides.get("deck", [])
-    slide_count = len(deck)
+    slide_titles = _slide_titles(slides)
     strategy = retry_strategy or {}
     failed_checks = {
         str(item).strip()
@@ -100,7 +145,7 @@ def generate_templates(slides: dict[str, Any], *, retry_strategy: dict[str, Any]
     }
 
     mode = _schema_mode()
-    legacy_fallback = _legacy_fallback(slide_count)
+    legacy_fallback = _legacy_fallback(slides)
     structured_fallback = _structured_fallback(legacy_fallback)
     fallback = structured_fallback if mode == "structured" else legacy_fallback
     retry_guidance = ""
@@ -136,7 +181,7 @@ def generate_templates(slides: dict[str, Any], *, retry_strategy: dict[str, Any]
             if "readme_md" in payload and "runbook_md" in payload:
                 readme = payload.get("readme_md")
                 runbook = payload.get("runbook_md")
-                return {
+                normalized = {
                     "readme_md": _normalize_document_node(
                         readme,
                         expected_filename="README.md",
@@ -148,14 +193,66 @@ def generate_templates(slides: dict[str, Any], *, retry_strategy: dict[str, Any]
                         fallback=structured_fallback["runbook_md"],
                     ),
                 }
-            return _legacy_to_structured(payload, structured_fallback)
+                normalized["readme_md"]["content"] = _ensure_template_alignment(
+                    normalized["readme_md"]["content"],
+                    fallback_content=structured_fallback["readme_md"]["content"],
+                    slide_titles=slide_titles,
+                    document_name="README",
+                )
+                normalized["runbook_md"]["content"] = _ensure_template_alignment(
+                    normalized["runbook_md"]["content"],
+                    fallback_content=structured_fallback["runbook_md"]["content"],
+                    slide_titles=slide_titles,
+                    document_name="RUNBOOK",
+                )
+                return normalized
+            normalized = _legacy_to_structured(payload, structured_fallback)
+            normalized["readme_md"]["content"] = _ensure_template_alignment(
+                normalized["readme_md"]["content"],
+                fallback_content=structured_fallback["readme_md"]["content"],
+                slide_titles=slide_titles,
+                document_name="README",
+            )
+            normalized["runbook_md"]["content"] = _ensure_template_alignment(
+                normalized["runbook_md"]["content"],
+                fallback_content=structured_fallback["runbook_md"]["content"],
+                slide_titles=slide_titles,
+                document_name="RUNBOOK",
+            )
+            return normalized
 
         if "README.md" in payload or "RUNBOOK.md" in payload:
-            return {
+            normalized = {
                 "README.md": payload.get("README.md", legacy_fallback["README.md"]),
                 "RUNBOOK.md": payload.get("RUNBOOK.md", legacy_fallback["RUNBOOK.md"]),
             }
-        return _structured_to_legacy(payload, legacy_fallback)
+            normalized["README.md"] = _ensure_template_alignment(
+                normalized["README.md"],
+                fallback_content=legacy_fallback["README.md"],
+                slide_titles=slide_titles,
+                document_name="README",
+            )
+            normalized["RUNBOOK.md"] = _ensure_template_alignment(
+                normalized["RUNBOOK.md"],
+                fallback_content=legacy_fallback["RUNBOOK.md"],
+                slide_titles=slide_titles,
+                document_name="RUNBOOK",
+            )
+            return normalized
+        normalized = _structured_to_legacy(payload, legacy_fallback)
+        normalized["README.md"] = _ensure_template_alignment(
+            normalized["README.md"],
+            fallback_content=legacy_fallback["README.md"],
+            slide_titles=slide_titles,
+            document_name="README",
+        )
+        normalized["RUNBOOK.md"] = _ensure_template_alignment(
+            normalized["RUNBOOK.md"],
+            fallback_content=legacy_fallback["RUNBOOK.md"],
+            slide_titles=slide_titles,
+            document_name="RUNBOOK",
+        )
+        return normalized
 
     return generate_structured_output(
         model=llm,
