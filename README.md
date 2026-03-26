@@ -132,6 +132,31 @@ Training Factory includes a lightweight evaluation framework:
 
 This makes research-mode behavior measurable and reproducible.
 
+Run the evaluation matrix with:
+```bash
+python scripts/eval_phase_b.py
+```
+
+By default, this writes a summary CSV and per-run bundles under `out/eval/phase_b/`.
+
+You can also run a specific preset phase:
+```bash
+python scripts/eval_phase_b.py --phase phase_b
+python scripts/eval_phase_b.py --phase phase_c
+```
+
+To limit the run to selected cases or modes:
+```bash
+python scripts/eval_phase_b.py --cases C1,C2 --modes M1,M2
+```
+
+To choose a custom output directory:
+```bash
+python scripts/eval_phase_b.py --out-root out/eval/custom_run
+```
+
+The main output is a `summary.csv` file plus generated `bundle.json` files for each case/mode combination.
+
 ## Streamlit Governance GUI
 
 Launch the GUI:
@@ -154,6 +179,8 @@ Capabilities:
 The GUI exposes system behavior transparently without hiding CLI execution.
 
 ### Using the Public App
+
+Public app: https://training-factory-andersrmr.streamlit.app/
 
 1. Enter a topic, choose an audience, pick a research mode, and click `Run pipeline`.
 2. Start with `M1 offline` if you want the most deterministic path, use `M2` for web research with the fallback provider, and use `M3` for expanded web research with SerpAPI when available.
