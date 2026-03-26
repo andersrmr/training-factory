@@ -446,12 +446,29 @@ def main() -> None:
         execution_mode_value = "in_process" if execution_mode.startswith("In-process") else "cli"
         out_dir = st.text_input("out_dir", value=str(state.get("out_dir") or "out/gui"))
         if execution_mode_value == "in_process":
-            st.caption("In-process runs keep the bundle in memory. `out_dir` is only used for optional logs and saves.")
+            st.caption(
+                "In-process runs keep the bundle in memory. A run log is written to `out_dir/logs`, "
+                "and the bundle is only written to disk if you use `Save current bundle to disk`."
+            )
         else:
-            st.caption("CLI runs write bundles under out_dir/<MODE>/bundle.json before the GUI reloads them.")
+            st.caption(
+                "CLI runs write a run log to `out_dir/logs` and write bundles under "
+                "`out_dir/<MODE>/bundle.json` before the GUI reloads them."
+            )
+        st.caption(
+            "Need retry tuning? Open `Advanced settings` to adjust `research_max_retries` "
+            "and `qa_max_retries`."
+        )
 
         with st.expander("Advanced settings", expanded=False):
-            run_cwd = st.text_input("run_cwd", value=str(state.get("run_cwd") or ""))
+            run_cwd = st.text_input(
+                "run_cwd",
+                value=str(state.get("run_cwd") or ""),
+                help=(
+                    "Working directory used only for CLI subprocess runs. Leave blank to run from "
+                    "the app's current project directory."
+                ),
+            )
             timeout_default = _coerce_timeout_seconds(state.get("timeout_s"))
             retry_default = _coerce_retry_count(state.get("research_max_retries"))
             qa_retry_default = _coerce_retry_count(state.get("qa_max_retries"))
@@ -461,6 +478,10 @@ def main() -> None:
                     min_value=1,
                     value=timeout_default,
                     step=1,
+                    help=(
+                        "Maximum time, in seconds, to wait for a CLI subprocess run before stopping it. "
+                        "Not used for in-process runs."
+                    ),
                 )
             )
             research_max_retries = int(
@@ -521,10 +542,14 @@ def main() -> None:
 
         c_run, c_validate = st.columns(2)
         run_clicked = c_run.button("Run pipeline", type="primary")
-        validate_clicked = c_validate.button("Validate only")
+        validate_clicked = c_validate.button("Validate loaded bundle")
+        st.caption(
+            "`Validate loaded bundle` checks the bundle currently loaded in the GUI. "
+            "It does not run the pipeline or generate a new bundle."
+        )
 
         if validate_clicked:
-            st.warning("CLI does not expose a validation-only flag; performing GUI-side validation only.")
+            st.warning("This runs GUI-side validation on the currently loaded bundle only.")
             bundle = st.session_state.get("bundle")
             if isinstance(bundle, dict):
                 gui_validation = _validate_loaded_bundle(bundle)
@@ -534,16 +559,16 @@ def main() -> None:
                     "warnings": gui_validation["warnings"],
                 }
                 if gui_validation["ok"]:
-                    st.success("GUI-side bundle validation passed.")
+                    st.success("Loaded bundle passed GUI-side validation.")
                 else:
-                    st.error("GUI-side bundle validation failed.")
+                    st.error("Loaded bundle failed GUI-side validation.")
             else:
                 validate_result = {
                     "ok": False,
-                    "errors": ["No loaded bundle available for GUI-side validation."],
+                    "errors": ["No loaded bundle is available to validate."],
                     "warnings": [],
                 }
-                st.error("No loaded bundle available for validation.")
+                st.error("No loaded bundle is available to validate.")
 
         if run_clicked:
             if execution_mode_value == "in_process":

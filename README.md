@@ -178,6 +178,8 @@ Capabilities:
 
 The GUI exposes system behavior transparently without hiding CLI execution.
 
+In `In-process` mode, the GUI keeps the generated bundle in memory, writes a run log under `out_dir/logs`, and only writes a bundle file if you explicitly use the save action. In `CLI subprocess` mode, the GUI writes logs under `out_dir/logs` and expects the generated bundle at `out_dir/<MODE>/bundle.json`. `Validate loaded bundle` checks the bundle currently loaded in the GUI and does not run the pipeline.
+
 ### Using the Public App
 
 Public app: https://training-factory-andersrmr.streamlit.app/
